@@ -17,7 +17,7 @@
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure url="https://github.com/matthewrball/linklite/releases/download/v0.3.1/LinkLite-0.3.1.dmg"
                  type="application/octet-stream"
-                 sparkle:edSignature="LZ3xCXWN7RAPvSxFkgrBCxQMYH7iYKrAVwW5L9YXvdUsznKdML3SqheVNYc4MttWjqI9rC3pYHzQzTud61IRCw==" length="4219723" />
+                 sparkle:edSignature="B7Y08umUtD1QS5Ppubv37hP+5UkgHJ9Cm8ZXvA9n7rwW2DSTAgsfMWRjT/z8hA6kN4qTLZnloimVLZO+wBfICw==" length="4223115" />
     </item>
     <item>
       <title>LinkLite 0.3.0</title>
