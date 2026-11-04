@@ -9,7 +9,7 @@ LinkLite is a free, open-source macOS app. It has no account system, analytics S
 Only for updates. LinkLite uses [Sparkle](https://sparkle-project.org) to check for new versions when it starts and once a day after that:
 
 - It downloads the update feed, `https://raw.githubusercontent.com/matthewrball/linklite/main/appcast.xml`, from GitHub.
-- When the feed lists a newer version, it downloads that release's zip from GitHub Releases, checks its EdDSA signature against the key built into the app, and asks before installing it.
+- When the feed lists a newer version, it downloads that release's disk image from GitHub Releases, checks its EdDSA signature against the key built into the app, and asks before installing it.
 
 These are plain HTTPS requests. Like any web request they reveal your IP address to GitHub, and they identify the app as LinkLite and its version and the Sparkle version in the `User-Agent` header. LinkLite does not send Sparkle's optional system profile (Mac model, macOS version, CPU), and the maintainer receives nothing: GitHub serves the files, under [GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement).
 

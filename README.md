@@ -36,12 +36,16 @@
 
 ## Install
 
-1. Download `LinkLite-<version>.zip` from [Releases](https://github.com/matthewrball/linklite/releases/latest), unzip it, and move **LinkLite** to Applications.
+1. Download `LinkLite-<version>.dmg` from [Releases](https://github.com/matthewrball/linklite/releases/latest), open it, and drag **LinkLite** into Applications.
 2. Quit DisplayLink Manager (menu-bar icon › Quit). Only one app can drive the dock at a time.
 3. Open LinkLite and allow **Screen & System Audio Recording** when asked ([why?](#why-does-linklite-need-screen-recording)), then quit and reopen it from its menu-bar icon.
 4. Your monitors light up within a few seconds. Turn on **Open at Login** from the menu-bar icon.
 
 Requires macOS 14 Sonoma or later on Apple silicon, and a USB 3 (5 Gbps) link to the dock. From then on LinkLite keeps itself up to date.
+
+<p align="center">
+  <img src="docs/assets/installer.png" alt="The LinkLite installer: drag LinkLite into Applications" width="600">
+</p>
 
 ## Why LinkLite
 
