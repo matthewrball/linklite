@@ -5,7 +5,7 @@ import CoreGraphics
 import Foundation
 import os
 
-private let log = Logger(subsystem: "com.ball.displaylink-lite", category: "display")
+private let log = Logger(subsystem: "com.ball.linklite", category: "display")
 
 /// A macOS display backed by the private CGVirtualDisplay API, shaped like one dock monitor.
 /// The display exists while this object is alive.

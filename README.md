@@ -1,87 +1,132 @@
-# DisplayLink Lite
+<p align="center">
+  <img src="docs/assets/logo.png" alt="LinkLite" width="160" height="160">
+</p>
 
-A lightweight replacement for DisplayLink Manager on macOS. Built and tested on a Humanscale M/Connect 2 dock (DisplayLink DL-6xxx "Ridge", USB `17e9:600f`) driving two HP Z27k G3 monitors at 3840×2160 @ 60 Hz.
+<h1 align="center">LinkLite</h1>
 
-**DisplayLink Lite** is a menu-bar app. For each monitor on the dock it creates a macOS virtual display, captures only the parts of it that change, and sends the changed 64×16 strips to the dock. The mouse pointer is drawn by the dock itself, so moving it costs a few bytes rather than a redraw. A still desktop puts nothing on the wire.
+<p align="center">
+  <strong>The lightweight driver for DisplayLink docks on macOS</strong><br>
+  <br>
+  Drive the monitors on your DisplayLink dock without DisplayLink Manager.<br>
+  One small menu-bar app. No background services, no login-window agent, no telemetry.
+</p>
 
-## For testers
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--2.0-2FA77A" alt="GPL-2.0-or-later"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-2FA77A" alt="macOS 14 Sonoma or later">
+  <img src="https://img.shields.io/badge/Apple%20silicon-native-2FA77A" alt="Apple silicon">
+  <a href="https://github.com/matthewrball/linklite/releases/latest"><img src="https://img.shields.io/github/v/release/matthewrball/linklite?include_prereleases&color=2FA77A&label=release" alt="Latest release"></a>
+  <a href="https://github.com/matthewrball/linklite/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/matthewrball/linklite/ci.yml?branch=main&label=CI" alt="CI"></a>
+</p>
 
-1. Download `DisplayLink-Lite-<version>.zip` from the release, unzip it, and move **DisplayLink Lite** to Applications.
-2. Quit DisplayLink Manager (menu-bar icon › Quit). Only one program can drive the dock.
-3. Open DisplayLink Lite. Grant **Screen & System Audio Recording** when asked (System Settings › Privacy & Security), then quit and reopen it from its menu-bar icon.
-4. Your monitors should light up within a few seconds. Turn on **Open at Login** from the menu-bar icon to keep using it.
+<p align="center">
+  <sub>Signed and notarized · Open source · Built on the <a href="https://lwn.net/Articles/1090989/">Vino</a> DisplayLink protocol research</sub>
+</p>
 
-Requirements: macOS 14 or later on Apple Silicon, and a USB 3 (5 Gbps) link to the dock.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-dark.png">
+    <img src="docs/assets/benchmark-light.png" alt="LinkLite versus DisplayLink Manager: 2.2x less GPU busy under 60 fps motion, zero GPU in LinkLite's own process, 3.8x less memory, 7.9x smaller app" width="760">
+  </picture>
+</p>
 
-Supported docks: DL-6xxx (Ridge) is tested. DL-3xxx (Ella) and DL-7400 (Navarro) docks are recognised by the Vino core but untested on macOS. Please report the dock model, `swift run dlprobe` output, and what you saw.
+---
 
-### Why Screen Recording permission?
+**LinkLite** is a native macOS menu-bar app that talks to DisplayLink USB docks directly. For each monitor on the dock it creates a macOS display, sends only the parts of the screen that change, and lets the dock draw your mouse pointer. Tested daily on a Humanscale M/Connect 2 driving two 4K monitors at 60 Hz.
 
-macOS has no public way for a third-party program to provide a display. Apple offers no display driver framework (DriverKit has none, and display kexts no longer work on Apple Silicon), so every USB display product, DisplayLink Manager included, creates a virtual display and reads its pixels back with ScreenCaptureKit, which macOS gates behind Screen Recording. DisplayLink Lite captures only the virtual displays it created for the dock, never your built-in screen, and the pixels go nowhere but the USB dock.
+## Install
 
-Going back to DisplayLink Manager: quit DisplayLink Lite and open DisplayLink Manager.
+1. Download `LinkLite-<version>.zip` from [Releases](https://github.com/matthewrball/linklite/releases/latest), unzip it, and move **LinkLite** to Applications.
+2. Quit DisplayLink Manager (menu-bar icon › Quit). Only one app can drive the dock at a time.
+3. Open LinkLite and allow **Screen & System Audio Recording** when asked ([why?](#why-does-linklite-need-screen-recording)), then quit and reopen it from its menu-bar icon.
+4. Your monitors light up within a few seconds. Turn on **Open at Login** from the menu-bar icon.
 
-## How it is built
+Requires macOS 14 Sonoma or later on Apple silicon, and a USB 3 (5 Gbps) link to the dock.
 
-| Part | Where | What it does |
+## Why LinkLite
+- **Recovers on its own.** Monitors switched on after LinkLite starts are picked up, and if the dock resets or its cable is replugged, your screens come back by themselves.
+- **Light on your Mac.** 3.8x less memory than DisplayLink Manager, a 2.6 MB app instead of 21 MB, and about half the GPU load under heavy motion. LinkLite's own process never touches the GPU. ([Benchmark](docs/BENCHMARK.md))
+- **A clean picture.** Native 4K60 per monitor, sharp HiDPI "looks like" resolutions, and no stale boxes or flicker: changed areas are re-sent to every one of the dock's frame buffers once the screen settles.
+- **The dock draws the pointer.** Moving the mouse sends a few bytes of position data instead of re-encoding the screen around it.
+- **Nothing extra running.** One process. No kernel extension, no login-window agent, no helper services. Quit it and it is gone.
+- **Recovers on its own.** Monitors switched on later are picked up, a dock reset or replugged cable brings your screens back without rearranging your windows, and display sleep turns the monitors off with your Mac's.
+- **Private by construction.** No network access at all, no analytics, no account. See [PRIVACY.md](PRIVACY.md).
+
+## The numbers, including where DisplayLink Manager wins
+
+Two 4K monitors, same Mac (Apple M5 Pro, macOS 26.6), same workload, measured back to back with DisplayLink Manager 16.1.25:
+
+| | LinkLite | DisplayLink Manager |
 |---|---|---|
-| Dock engine (Rust) | `engine/` | USB transport, HDCP 2.2 authentication, encrypted control plane, mode setting, video codec, hardware cursor, rate limiting; C ABI in `engine/include/dllite.h` |
-| Vendored protocol core | `vendor/vino/` | Vino/chimera userspace DL3 implementation, GPL-2.0-or-later; local patches listed in `vendor/vino/UPSTREAM.md` |
-| Display host (Swift) | `Sources/DisplayLinkLite/` | Virtual displays, capture, pointer tracking, menu bar, display sleep/wake |
-| Preflight probe | `Sources/dlprobe/` | Read-only USB link and descriptor check |
+| Whole GPU busy, 60 fps motion | **15%** | 33% |
+| GPU time in the driver's own process | **0 ms/s** | 9–168 ms/s |
+| Memory | **134 MB** | 513 MB |
+| App size | **2.6 MB** | 20.6 MB |
+| CPU, live desktop | 55% | **2%** |
+| CPU, 60 fps motion | 338% | **20%** |
 
-Licence: GPL-2.0-or-later (`LICENSE`), because the engine links the GPL Vino core.
+DisplayLink Manager compresses video on the GPU; LinkLite compresses it on the CPU, so it uses more CPU when large parts of the screen move. A GPU encoder is the next big item on the roadmap. Method, per-run numbers, and raw data: [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
-## Build and install
+## Compatibility
 
-Requires Xcode command-line tools and a Rust toolchain (rustup recommended; Homebrew's Rust builds an app that runs only on the macOS it was built on).
+| | Status |
+|---|---|
+| DisplayLink DL-6xxx ("Ridge") docks, e.g. Humanscale M/Connect 2, Dell D6000 | **Tested** (M/Connect 2, two 4K60 monitors) |
+| DL-3xxx ("Ella") and DL-7400 ("Navarro") docks | Recognised by the protocol core; untested on macOS |
+| Macs | Apple silicon, macOS 14 or later |
+| Protected (HDCP) video playback | Not supported |
 
-```sh
-scripts/build-app.sh
-cp -R "dist/DisplayLink Lite.app" /Applications/
-open "/Applications/DisplayLink Lite.app"
+Tried LinkLite with another dock? Please [file a dock report](https://github.com/matthewrball/linklite/issues/new?template=dock_report.yml), whether it worked or not.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A["macOS virtual display<br/>(one per monitor)"] --> B["ScreenCaptureKit<br/>changed areas only"]
+    B --> C["Strip check<br/>64×16 tiles, keep only<br/>tiles that really changed"]
+    C --> D["Wavelet encoder<br/>(DisplayLink codec)"]
+    D --> E["Encrypted USB session<br/>HDCP 2.2 + AES"]
+    E --> F["DisplayLink dock"]
+    G["Mouse pointer"] --> E
 ```
 
-The build signs with your Developer ID or Apple Development identity if the keychain has one; otherwise it signs ad hoc, and macOS will ask for Screen Recording permission again after every rebuild.
+The dock speaks DisplayLink's proprietary, encrypted protocol. LinkLite's engine (Rust) builds on the open-source [Vino](https://lwn.net/Articles/1090989/) work, which documented that protocol for Linux, and adds the macOS side (Swift): virtual displays, capture, pointer tracking, and the menu-bar app. Local changes to the vendored protocol core are listed in [`vendor/vino/UPSTREAM.md`](vendor/vino/UPSTREAM.md).
 
-### Release package
+## FAQ
 
-```sh
-xcrun notarytool store-credentials dllite --apple-id <apple-id> --team-id <team-id>   # once
-DLL_NOTARY_PROFILE=dllite scripts/release.sh
-```
+### Why does LinkLite need Screen Recording?
 
-This produces `dist/DisplayLink-Lite-<version>.zip` and its `.sha256`, signed with the Developer ID and, with a notary profile, notarized and stapled so testers can open it without a Gatekeeper warning. Without `DLL_NOTARY_PROFILE` the zip is signed but not notarized; testers then approve it once under System Settings › Privacy & Security › Open Anyway.
+macOS has no public way for an app to provide a display: Apple offers no display driver framework, and display kernel extensions no longer work on Apple silicon. So every USB display product, DisplayLink Manager included, creates a virtual display and reads its pixels back with ScreenCaptureKit, which macOS puts behind the Screen Recording permission. LinkLite captures only the virtual displays it creates for your dock, never your built-in screen, and the pixels go nowhere but the USB dock.
 
-On first launch, grant **Screen & System Audio Recording** to DisplayLink Lite (System Settings › Privacy & Security). Turn on **Open at Login** from the menu-bar item.
+### Can I switch back to DisplayLink Manager?
 
-## Using it instead of DisplayLink Manager
+Yes. Quit LinkLite and open DisplayLink Manager. Nothing is uninstalled or changed on your system.
 
-Only one program can drive the dock. Quit DisplayLink Manager before opening DisplayLink Lite; while DisplayLink Manager holds the dock, the menu shows that the dock is in use.
+### Is this made by DisplayLink or Synaptics?
 
-Monitors use their EDID preferred mode (3840×2160 at 60 Hz for the HP Z27k G3). macOS offers "looks like" scaled resolutions; the first time a monitor is seen it defaults to "looks like 1920×1080", which is drawn at exactly the panel's native 3840×2160.
+No. LinkLite is an independent open-source project and is not affiliated with or endorsed by Synaptics or DisplayLink. DisplayLink is a trademark of Synaptics Incorporated, used here only to describe compatibility.
 
-## Diagnostics
+## Build from source
 
 ```sh
-swift run dlprobe                  # USB link speed and current owner of the dock
-swift run dlprobe --descriptors    # interface and endpoint layout (read-only)
-cargo run --release --manifest-path engine/Cargo.toml --bin dllite-probe
-                                   # engage the dock and list each connector's monitor
+scripts/build-app.sh          # Rust engine + Swift app, signed if you have a Developer ID
+open dist/LinkLite.app
 ```
 
-`dllite-probe` needs the dock to itself: quit DisplayLink Lite and DisplayLink Manager first.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the toolchain, tests, and diagnostics, and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the engineering notes.
 
-A 480 Mbps USB 2.0 link is too slow for two 4K monitors; `dlprobe` reports it as `FAIL`. Fix the cable or port until it reports 5000 Mbps or faster.
+## Privacy and security
 
-## Tests
+No network access, no telemetry, no identifiers. Details in [PRIVACY.md](PRIVACY.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
-```sh
-cargo test --manifest-path engine/Cargo.toml        # engine
-(cd engine && cargo test -p vino-chimera)           # vendored protocol core
-swift test                                          # dlprobe core
-```
+## Credits
 
-`swift build` links the engine archive, so build the engine first (`cargo build --release --manifest-path engine/Cargo.toml`).
+The DisplayLink protocol, HDCP session, and video codec come from [Vino](https://lwn.net/Articles/1090989/) by Mike Lothian and contributors ([source](https://github.com/cameron1729/Vino)), used under GPL-2.0-or-later.
 
-See [ROADMAP.md](ROADMAP.md) for the gates this replacement had to pass.
+## License
+
+[GPL-2.0-or-later](LICENSE) © 2026 Matthew Ball.
+
+---
+
+<p align="center"><sub>Your monitors, without the weight.</sub></p>

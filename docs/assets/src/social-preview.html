@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>LinkLite social preview</title>
+<style>
+  html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; }
+  body {
+    position: relative;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+    background:
+      radial-gradient(560px 420px at 360px 330px, rgba(96, 118, 214, 0.38), rgba(96, 118, 214, 0) 70%),
+      radial-gradient(900px 520px at 1180px 640px, rgba(85, 181, 143, 0.16), rgba(85, 181, 143, 0) 70%),
+      linear-gradient(160deg, #1d2658 0%, #141a40 55%, #0e1230 100%);
+    -webkit-font-smoothing: antialiased;
+  }
+  .grain { position: absolute; inset: 0; opacity: 0.5; mix-blend-mode: soft-light; }
+  .logo { position: absolute; left: 94px; top: 66px; width: 500px; height: 500px; }
+  .text { position: absolute; left: 616px; top: 0; bottom: 0; width: 620px; display: flex; flex-direction: column; justify-content: center; }
+  h1 {
+    margin: 0;
+    font-size: 124px; line-height: 1; font-weight: 700; letter-spacing: -0.035em;
+    color: #f3ecdb;
+  }
+  h1 span { color: #8fdcb8; }
+  p {
+    margin: 28px 0 0;
+    font-size: 40px; line-height: 1.22; font-weight: 500; letter-spacing: -0.012em;
+    color: #c3cbec;
+  }
+  .meta {
+    margin-top: 42px; display: flex; gap: 14px;
+  }
+  .chip {
+    font-size: 21px; font-weight: 600; letter-spacing: 0.01em;
+    color: #e9e2cf; padding: 9px 18px; border-radius: 999px;
+    background: rgba(243, 236, 219, 0.08);
+    box-shadow: inset 0 0 0 1.5px rgba(243, 236, 219, 0.18);
+  }
+</style>
+<svg class="grain" width="1280" height="640" xmlns="http://www.w3.org/2000/svg">
+  <filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="3"/><feColorMatrix type="saturate" values="0"/></filter>
+  <rect width="1280" height="640" filter="url(#n)" opacity="0.35"/>
+</svg>
+<img class="logo" src="../logo.png" alt="">
+<div class="text">
+  <h1>Link<span>Lite</span></h1>
+  <p>The lightweight driver for DisplayLink&nbsp;docks on&nbsp;macOS</p>
+  <div class="meta">
+    <div class="chip">Menu-bar app</div>
+    <div class="chip">Open source</div>
+    <div class="chip">GPL-2.0</div>
+  </div>
+</div>

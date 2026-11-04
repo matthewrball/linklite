@@ -7,7 +7,7 @@ import Foundation
 import os
 @preconcurrency import ScreenCaptureKit
 
-private let log = Logger(subsystem: "com.ball.displaylink-lite", category: "capture")
+private let log = Logger(subsystem: "com.ball.linklite", category: "capture")
 
 /// Captures one virtual display with ScreenCaptureKit at the dock's native mode and hands every
 /// complete frame to the engine.
@@ -42,7 +42,7 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         self.height = height
         self.engine = engine
         self.onStop = onStop
-        queue = DispatchQueue(label: "com.ball.displaylink-lite.capture.head\(head)", qos: .userInteractive)
+        queue = DispatchQueue(label: "com.ball.linklite.capture.head\(head)", qos: .userInteractive)
     }
 
     /// Finds `displayID` in the shareable content (a freshly created virtual display can take a

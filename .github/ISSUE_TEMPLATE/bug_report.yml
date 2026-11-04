@@ -1,0 +1,77 @@
+name: Bug report
+description: Something went wrong while LinkLite was driving your dock.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Docks, monitors, and Macs vary a lot, so the details below matter.
+
+        Security issues should not be filed here: use the repository's **Security** tab › **Report a vulnerability** instead.
+  - type: input
+    id: version
+    attributes:
+      label: LinkLite version
+      description: Shown in Finder › Get Info on LinkLite.app, or the release you downloaded.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: dock
+    attributes:
+      label: Dock
+      description: Make and model of the dock, and how it is connected (cable, adapter, port).
+      placeholder: "Humanscale M/Connect 2, USB-C cable to the left Thunderbolt port"
+    validations:
+      required: true
+  - type: textarea
+    id: monitors
+    attributes:
+      label: Monitors
+      description: Each monitor on the dock, with its resolution and refresh rate, and how it is connected to the dock.
+      placeholder: |
+        2x HP Z27k G3, 3840x2160 @ 60 Hz, DisplayPort
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: Apple menu › About This Mac.
+      placeholder: "macOS 15.6"
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model
+      placeholder: "MacBook Pro 14-inch, M3 Pro"
+    validations:
+      required: true
+  - type: textarea
+    id: dlprobe
+    attributes:
+      label: dlprobe output
+      description: |
+        From a clone of this repository, run `swift run dlprobe --descriptors`. For a dock other than the M/Connect 2, add `--product <Product ID>`, taking the Product ID from System Information › USB. Paste the output here.
+      render: text
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Screenshots or photos of the monitors help with display glitches.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Right after the problem, run this in Terminal and paste the output:
+
+        ```sh
+        log show --predicate 'subsystem == "com.ball.linklite"' --last 10m
+        ```
+
+        The log contains dock status, monitor model names and resolutions, and errors. Review it before posting.
+      render: text

@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<meta charset="utf-8">
+<title>bench-motion</title>
+<style>html,body{margin:0;height:100%;background:#101418;overflow:hidden}canvas{display:block;width:100vw;height:100vh}</style>
+<canvas id="c"></canvas>
+<script>
+// Deterministic 60 fps workload: a scrolling gradient, drifting cards and a ticking counter, so
+// every frame changes most of the window, like scrolling a web page.
+const c = document.getElementById('c'), g = c.getContext('2d');
+function size() { c.width = innerWidth * devicePixelRatio; c.height = innerHeight * devicePixelRatio; }
+addEventListener('resize', size); size();
+let f = 0;
+function draw() {
+  const W = c.width, H = c.height; f++;
+  const grad = g.createLinearGradient(0, (f * 4) % H - H, 0, (f * 4) % H + H);
+  grad.addColorStop(0, '#1d2b3a'); grad.addColorStop(0.5, '#3a6ea5'); grad.addColorStop(1, '#1d2b3a');
+  g.fillStyle = grad; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 24; i++) {
+    const x = ((i * 173 + f * (2 + i % 5)) % (W + 300)) - 150, y = (i * 97) % H;
+    g.fillStyle = `hsl(${(i * 37 + f) % 360} 70% 60%)`;
+    g.fillRect(x, y, 260, 120);
+    g.fillStyle = '#fff'; g.font = `${28 * devicePixelRatio}px -apple-system`;
+    g.fillText(`Frame ${f}  ·  card ${i}`, x + 12, y + 50);
+  }
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+</script>

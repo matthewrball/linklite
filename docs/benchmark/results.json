@@ -1,0 +1,88 @@
+{
+  "LinkLite": {
+    "desktop": {
+      "gpu_util_pct": 11.901098901098901,
+      "driver_gpu_ms_per_s": 0.0,
+      "windowserver_gpu_ms_per_s": 162.15541758241758,
+      "gpu_ms_per_s_total": 162.15541758241758,
+      "driver_cpu_pct": 55.387912087912085,
+      "driver_mem_mb": 133.43956043956044
+    },
+    "animation": {
+      "gpu_util_pct": 15.23076923076923,
+      "driver_gpu_ms_per_s": 0.0,
+      "windowserver_gpu_ms_per_s": 250.04921978021977,
+      "gpu_ms_per_s_total": 250.04921978021977,
+      "driver_cpu_pct": 337.66483516483515,
+      "driver_mem_mb": 134.67032967032966
+    }
+  },
+  "DisplayLink Manager": {
+    "desktop": {
+      "gpu_util_pct": 2.391304347826087,
+      "driver_gpu_ms_per_s": 8.858652173913043,
+      "windowserver_gpu_ms_per_s": 67.49789130434783,
+      "gpu_ms_per_s_total": 76.35654347826087,
+      "driver_cpu_pct": 2.023913043478261,
+      "driver_mem_mb": 512.4
+    },
+    "animation": {
+      "gpu_util_pct": 32.955555555555556,
+      "driver_gpu_ms_per_s": 167.5191111111111,
+      "windowserver_gpu_ms_per_s": 154.9953111111111,
+      "gpu_ms_per_s_total": 322.5144222222222,
+      "driver_cpu_pct": 20.184444444444445,
+      "driver_mem_mb": 513.2888888888889
+    }
+  },
+  "runs": {
+    "lite1": {
+      "desktop": {
+        "gpu_util_pct": 3.7777777777777777,
+        "driver_gpu_ms_per_s": 0.0,
+        "windowserver_gpu_ms_per_s": 123.459,
+        "driver_cpu_pct": 52.69111111111111,
+        "driver_mem_mb": 136.15555555555557
+      },
+      "animation": {
+        "gpu_util_pct": 9.652173913043478,
+        "driver_gpu_ms_per_s": 0.0,
+        "windowserver_gpu_ms_per_s": 216.17017391304347,
+        "driver_cpu_pct": 336.1891304347826,
+        "driver_mem_mb": 135.04347826086956
+      }
+    },
+    "lite2": {
+      "desktop": {
+        "gpu_util_pct": 19.847826086956523,
+        "driver_gpu_ms_per_s": 0.0,
+        "windowserver_gpu_ms_per_s": 200.01060869565217,
+        "driver_cpu_pct": 58.02608695652174,
+        "driver_mem_mb": 130.7826086956522
+      },
+      "animation": {
+        "gpu_util_pct": 20.933333333333334,
+        "driver_gpu_ms_per_s": 0.0,
+        "windowserver_gpu_ms_per_s": 284.6811333333333,
+        "driver_cpu_pct": 339.17333333333335,
+        "driver_mem_mb": 134.2888888888889
+      }
+    },
+    "dlm": {
+      "desktop": {
+        "gpu_util_pct": 2.391304347826087,
+        "driver_gpu_ms_per_s": 8.858652173913043,
+        "windowserver_gpu_ms_per_s": 67.49789130434783,
+        "driver_cpu_pct": 2.023913043478261,
+        "driver_mem_mb": 512.4
+      },
+      "animation": {
+        "gpu_util_pct": 32.955555555555556,
+        "driver_gpu_ms_per_s": 167.5191111111111,
+        "windowserver_gpu_ms_per_s": 154.9953111111111,
+        "driver_cpu_pct": 20.184444444444445,
+        "driver_mem_mb": 513.2888888888889
+      }
+    }
+  }
+}

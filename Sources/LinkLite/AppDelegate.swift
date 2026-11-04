@@ -5,7 +5,7 @@ import CDLLite
 import os
 import ServiceManagement
 
-private let log = Logger(subsystem: "com.ball.displaylink-lite", category: "app")
+private let log = Logger(subsystem: "com.ball.linklite", category: "app")
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -16,13 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let image = NSImage(systemSymbolName: "display.2", accessibilityDescription: "DisplayLink Lite") {
+        if let image = NSImage(systemSymbolName: "display.2", accessibilityDescription: "LinkLite") {
             image.isTemplate = true
             item.button?.image = image
         } else {
             item.button?.title = "DL"
         }
-        item.button?.toolTip = "DisplayLink Lite"
+        item.button?.toolTip = "LinkLite"
         menu.delegate = self
         menu.autoenablesItems = false
         item.menu = menu
@@ -102,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(login)
 
         menu.addItem(.separator())
-        let quit = actionItem("Quit DisplayLink Lite", #selector(quit))
+        let quit = actionItem("Quit LinkLite", #selector(quit))
         quit.keyEquivalent = "q"
         menu.addItem(quit)
     }

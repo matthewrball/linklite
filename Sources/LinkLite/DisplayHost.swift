@@ -7,7 +7,7 @@ import Foundation
 import os
 import ScreenCaptureKit
 
-private let log = Logger(subsystem: "com.ball.displaylink-lite", category: "host")
+private let log = Logger(subsystem: "com.ball.linklite", category: "host")
 
 /// Ties the engine to macOS: one virtual display plus one capture stream per attached dock head.
 @MainActor

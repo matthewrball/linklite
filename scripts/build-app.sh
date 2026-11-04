@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# Builds the Rust engine and the Swift host, then assembles and signs "dist/DisplayLink Lite.app".
+# Builds the Rust engine and the Swift host, then assembles and signs "dist/LinkLite.app".
 #
 # Signing: uses the first Developer ID Application, then Apple Development, identity in the
-# keychain (override with DLL_SIGN_IDENTITY). A stable identity keeps the Screen Recording grant
+# keychain (override with LINKLITE_SIGN_IDENTITY). A stable identity keeps the Screen Recording grant
 # across rebuilds. Without one the bundle is signed ad hoc, and macOS treats every rebuild as a new
 # app, so the Screen Recording grant has to be given again after each build.
 set -euo pipefail
@@ -19,17 +19,18 @@ if command -v rustup >/dev/null && rustup run stable cargo --version >/dev/null 
     cargo=(rustup run stable cargo)
 fi
 MACOSX_DEPLOYMENT_TARGET=14.0 "${cargo[@]}" build --release --manifest-path engine/Cargo.toml
-swift build -c release --product DisplayLinkLite
+swift build -c release --product LinkLite
 bin_dir="$(swift build -c release --show-bin-path)"
 
-app="dist/DisplayLink Lite.app"
+app="dist/LinkLite.app"
 rm -rf "$app"
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp Resources/Info.plist "$app/Contents/Info.plist"
-cp "$bin_dir/DisplayLinkLite" "$app/Contents/MacOS/DisplayLinkLite"
+cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
+cp "$bin_dir/LinkLite" "$app/Contents/MacOS/LinkLite"
 printf 'APPL????' > "$app/Contents/PkgInfo"
 
-identity="${DLL_SIGN_IDENTITY:-}"
+identity="${LINKLITE_SIGN_IDENTITY:-}"
 if [[ -z "$identity" ]]; then
     identities="$(security find-identity -v -p codesigning)"
     for kind in "Developer ID Application" "Apple Development"; do

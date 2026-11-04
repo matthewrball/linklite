@@ -1,0 +1,269 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>LinkLite icon</title>
+<style>
+  html, body { margin: 0; width: 1024px; height: 1024px; background: transparent; overflow: hidden; }
+  svg { display: block; }
+</style>
+<svg id="icon" width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Cream tile -->
+    <linearGradient id="tileFace" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f1ebdc"/>
+      <stop offset="1" stop-color="#e5dcc5"/>
+    </linearGradient>
+    <linearGradient id="tileInner" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#efe9d9"/>
+      <stop offset="1" stop-color="#e7dfca"/>
+    </linearGradient>
+    <linearGradient id="tileSide" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d6c8a8"/>
+      <stop offset="1" stop-color="#c2b28c"/>
+    </linearGradient>
+
+    <!-- Enamel paints -->
+    <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2d3b7c"/>
+      <stop offset="1" stop-color="#1a2352"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#94dcb8"/>
+      <stop offset="1" stop-color="#55b58f"/>
+    </linearGradient>
+    <linearGradient id="mintDeep" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7fd4aa"/>
+      <stop offset="1" stop-color="#3fa47d"/>
+    </linearGradient>
+
+    <!-- Lit glass screens -->
+    <linearGradient id="screenA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dbe8ff"/>
+      <stop offset="0.6" stop-color="#b3c9f3"/>
+      <stop offset="1" stop-color="#95ade6"/>
+    </linearGradient>
+    <linearGradient id="screenB" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e8fdfb"/>
+      <stop offset="0.6" stop-color="#bdeef0"/>
+      <stop offset="1" stop-color="#97dde3"/>
+    </linearGradient>
+    <radialGradient id="screenGlow" cx="0.5" cy="0.45" r="0.6">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="glare" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.5"/>
+      <stop offset="0.42" stop-color="#fff" stop-opacity="0.1"/>
+      <stop offset="0.43" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+
+    <radialGradient id="rivet" cx="0.38" cy="0.34" r="0.7">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="0.35" stop-color="#ffffff" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.25"/>
+    </radialGradient>
+
+    <!-- Tile: soft drop shadow under the whole icon -->
+    <filter id="tileShadow" x="-20%" y="-20%" width="140%" height="145%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="16" result="b"/>
+      <feOffset in="b" dy="14" result="o"/>
+      <feFlood flood-color="#3a2c10" flood-opacity="0.32"/>
+      <feComposite in2="o" operator="in" result="s"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="b2"/>
+      <feOffset in="b2" dy="3" result="o2"/>
+      <feFlood flood-color="#3a2c10" flood-opacity="0.25"/>
+      <feComposite in2="o2" operator="in" result="s2"/>
+      <feMerge><feMergeNode in="s"/><feMergeNode in="s2"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Tile face: pillowed rim lit from the top left -->
+    <filter id="pillow" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="14" result="h"/>
+      <feDiffuseLighting in="h" surfaceScale="9" diffuseConstant="1.12" lighting-color="#fff" result="d">
+        <feDistantLight azimuth="235" elevation="58"/>
+      </feDiffuseLighting>
+      <feComposite in="d" in2="SourceAlpha" operator="in" result="dIn"/>
+      <feBlend in="SourceGraphic" in2="dIn" mode="multiply" result="shaded"/>
+      <feSpecularLighting in="h" surfaceScale="9" specularConstant="0.45" specularExponent="22" lighting-color="#fffaf0" result="sp">
+        <feDistantLight azimuth="235" elevation="40"/>
+      </feSpecularLighting>
+      <feComposite in="sp" in2="SourceAlpha" operator="in" result="spIn"/>
+      <feComposite in="shaded" in2="spIn" operator="arithmetic" k2="1" k3="0.3"/>
+    </filter>
+
+    <!-- Recessed inner field: inner shadow on top-left, faint light on bottom-right -->
+    <filter id="recess" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feComponentTransfer in="SourceAlpha" result="inv"><feFuncA type="table" tableValues="1 0"/></feComponentTransfer>
+      <feGaussianBlur in="inv" stdDeviation="9" result="ib"/>
+      <feOffset in="ib" dx="5" dy="8" result="io"/>
+      <feFlood flood-color="#6b5a33" flood-opacity="0.30"/>
+      <feComposite in2="io" operator="in" result="sh"/>
+      <feComposite in="sh" in2="SourceAlpha" operator="in" result="shIn"/>
+      <feOffset in="ib" dx="-4" dy="-6" result="io2"/>
+      <feFlood flood-color="#ffffff" flood-opacity="0.6"/>
+      <feComposite in2="io2" operator="in" result="hl"/>
+      <feComposite in="hl" in2="SourceAlpha" operator="in" result="hlIn"/>
+      <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="hlIn"/><feMergeNode in="shIn"/></feMerge>
+    </filter>
+
+    <!-- Enamel link: rounded bevel, specular sheen, drop + contact shadow -->
+    <filter id="enamel" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="7" result="h"/>
+      <feDiffuseLighting in="h" surfaceScale="5" diffuseConstant="1.18" lighting-color="#fff" result="d">
+        <feDistantLight azimuth="235" elevation="55"/>
+      </feDiffuseLighting>
+      <feComposite in="d" in2="SourceAlpha" operator="in" result="dIn"/>
+      <feBlend in="SourceGraphic" in2="dIn" mode="multiply" result="shaded"/>
+      <feSpecularLighting in="h" surfaceScale="5" specularConstant="0.9" specularExponent="32" lighting-color="#fff" result="sp">
+        <feDistantLight azimuth="235" elevation="42"/>
+      </feSpecularLighting>
+      <feComposite in="sp" in2="SourceAlpha" operator="in" result="spIn"/>
+      <feComposite in="shaded" in2="spIn" operator="arithmetic" k2="1" k3="0.6" result="lit"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 1" result="grain"/>
+      <feComposite in="lit" in2="grain" operator="arithmetic" k2="1" k3="0.05" k4="-0.025" result="grained"/>
+      <feComposite in="grained" in2="SourceAlpha" operator="in"/>
+    </filter>
+
+    <!-- Link body side wall: soft shading plus drop and contact shadows on whatever is below -->
+    <filter id="linkBody" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="14" result="sb"/>
+      <feOffset in="sb" dx="6" dy="20" result="so"/>
+      <feFlood flood-color="#2b2208" flood-opacity="0.32"/>
+      <feComposite in2="so" operator="in" result="drop"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="cb"/>
+      <feOffset in="cb" dx="1" dy="4" result="co"/>
+      <feFlood flood-color="#1d1605" flood-opacity="0.42"/>
+      <feComposite in2="co" operator="in" result="contact"/>
+      <feMerge><feMergeNode in="drop"/><feMergeNode in="contact"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Screen glass: recessed under the bezel -->
+    <filter id="glass" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feComponentTransfer in="SourceAlpha" result="inv"><feFuncA type="table" tableValues="1 0"/></feComponentTransfer>
+      <feGaussianBlur in="inv" stdDeviation="10" result="ib"/>
+      <feOffset in="ib" dx="4" dy="9" result="io"/>
+      <feFlood flood-color="#0b1a3a" flood-opacity="0.45"/>
+      <feComposite in2="io" operator="in" result="sh"/>
+      <feComposite in="sh" in2="SourceAlpha" operator="in" result="shIn"/>
+      <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="shIn"/></feMerge>
+    </filter>
+    <filter id="ledGlow" x="-100%" y="-300%" width="300%" height="700%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="b"/>
+      <feFlood flood-color="#b9fff0" flood-opacity="0.9"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Tile -->
+  <g filter="url(#tileShadow)">
+    <path id="tileSidePath" fill="url(#tileSide)"/>
+    <path id="tileFacePath" fill="url(#tileFace)" filter="url(#pillow)"/>
+  </g>
+  <path id="tileInnerPath" fill="url(#tileInner)" filter="url(#recess)"/>
+
+  <!-- Screens (glass sits beneath both bezels) -->
+  <g id="screens"></g>
+
+  <!-- Links -->
+  <g id="links"></g>
+</svg>
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+const Q = Object.fromEntries([...new URLSearchParams(location.search)].map(([k, v]) => [k, +v]));
+// ?small=1 renders the 16/32 px master: chunkier bezels, deeper mint, no rivets or LED.
+const P = Object.assign({
+  cx: 512, cy: 512, half: 412,     // macOS grid: 824 px body
+  W: 472, H: 350, R: 100, T: 84, r: 26, D: 11,
+  dx: 116, dy: 60,
+}, Q.small ? { W: 500, H: 380, R: 110, T: 110, r: 22, D: 14, dx: 118, dy: 66 } : {}, Q);
+
+function squircle(cx, cy, a, n = 5, steps = 720) {
+  let d = '';
+  for (let i = 0; i < steps; i++) {
+    const t = (i / steps) * Math.PI * 2;
+    const c = Math.cos(t), s = Math.sin(t);
+    const x = cx + a * Math.sign(c) * Math.pow(Math.abs(c), 2 / n);
+    const y = cy + a * Math.sign(s) * Math.pow(Math.abs(s), 2 / n);
+    d += (i ? 'L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2);
+  }
+  return d + 'Z';
+}
+function rr(x, y, w, h, r) {
+  return `M${x + r} ${y}H${x + w - r}A${r} ${r} 0 0 1 ${x + w} ${y + r}V${y + h - r}` +
+    `A${r} ${r} 0 0 1 ${x + w - r} ${y + h}H${x + r}A${r} ${r} 0 0 1 ${x} ${y + h - r}` +
+    `V${y + r}A${r} ${r} 0 0 1 ${x + r} ${y}Z`;
+}
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+// Tile
+document.getElementById('tileSidePath').setAttribute('d', squircle(P.cx, P.cy + 7, P.half));
+document.getElementById('tileFacePath').setAttribute('d', squircle(P.cx, P.cy, P.half));
+document.getElementById('tileInnerPath').setAttribute('d', squircle(P.cx, P.cy + 2, P.half - 26));
+
+// Links: A (navy) up-left, B (mint) down-right
+const A = { x: P.cx - P.dx - P.W / 2, y: P.cy - P.dy - P.H / 2, paint: 'url(#navy)', side: '#161c4a', screen: 'url(#screenA)', rivet: '#141a44', edge: '#6575c4', id: 'A' };
+const B = { x: P.cx + P.dx - P.W / 2, y: P.cy + P.dy - P.H / 2, paint: P.small ? 'url(#mintDeep)' : 'url(#mint)', side: '#3b8f6d', screen: 'url(#screenB)', rivet: '#3f9a75', edge: '#d4f3e2', id: 'B' };
+const ring = (L, ox = 0, oy = 0) =>
+  rr(L.x + ox, L.y + oy, P.W, P.H, P.R) + rr(L.x + ox + P.T, L.y + oy + P.T, P.W - 2 * P.T, P.H - 2 * P.T, P.r);
+// The solid body of a link: the face swept down by its thickness D.
+const sweep = (L, parent, attrs) => { for (let i = 1; i <= P.D; i++) el('path', Object.assign({ d: ring(L, 0.3 * i, i) }, attrs), parent); };
+const defs = document.querySelector('defs');
+const screens = document.getElementById('screens');
+const links = document.getElementById('links');
+
+for (const L of [A, B]) {
+  const clip = el('clipPath', { id: 'ring' + L.id }, defs);
+  el('path', { d: ring(L), 'clip-rule': 'evenodd' }, clip);
+  const g = el('g', { id: 'link' + L.id }, defs);
+  sweep(L, el('g', { filter: 'url(#linkBody)' }, g), { 'fill-rule': 'evenodd', fill: L.side });
+  const face = el('g', { filter: 'url(#enamel)' }, g);
+  el('path', { d: ring(L), 'fill-rule': 'evenodd', fill: L.paint }, face);
+  // lighter enamel lip along every edge of the bezel
+  el('path', { d: ring(L), fill: 'none', stroke: L.edge, 'stroke-opacity': 0.55, 'stroke-width': 16, 'clip-path': `url(#ring${L.id})` }, face);
+  // rivets on the four corners of the bezel
+  const k = P.R - (P.R - P.T / 2) * Math.SQRT1_2;
+  for (const [ux, uy] of P.small ? [] : [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+    const x = ux ? L.x + P.W - k : L.x + k, y = uy ? L.y + P.H - k : L.y + k;
+    el('circle', { cx: x, cy: y, r: 8.5, fill: L.rivet }, face);
+    el('circle', { cx: x, cy: y, r: 8.5, fill: 'url(#rivet)' }, face);
+  }
+  // power LED centred on the bottom bezel (A's bottom centre sits behind B's bar)
+  if (L === B && !P.small) {
+    const lx = L.x + P.W / 2, ly = L.y + P.H - P.T / 2;
+    el('path', { d: rr(lx - 20, ly - 6, 40, 12, 6), fill: L.rivet }, face);
+    el('path', { d: rr(lx - 13, ly - 2.5, 26, 5, 2.5), fill: '#f2fffb', filter: 'url(#ledGlow)' }, face);
+  }
+  // glass screen
+  const sx = L.x + P.T - 6, sy = L.y + P.T - 6, sw = P.W - 2 * P.T + 12, sh = P.H - 2 * P.T + 12;
+  const sg = el('g', { filter: 'url(#glass)' }, screens);
+  el('path', { d: rr(sx, sy, sw, sh, P.r + 6), fill: L.screen }, sg);
+  el('path', { d: rr(sx, sy, sw, sh, P.r + 6), fill: 'url(#screenGlow)' }, sg);
+  el('path', { d: rr(sx, sy, sw, sh, P.r + 6), fill: 'url(#glare)' }, sg);
+}
+
+// Weave. The links only overlap at two crossings: A's right bar over B's top bar (upper right),
+// and B's left bar over A's bottom bar (lower left). A diagonal through the centre separates
+// them, so each half is simply drawn in its own stacking order; shadows stay physically right
+// and nothing but screens lies on the seam. The diagonal is a pixel-aligned staircase so the
+// two complementary clips leave no anti-aliased hairline.
+const S = 8, N = 1024 / S;
+let stairs = '';
+for (let i = 0; i < N; i++) stairs += `L${(i + 1) * S} ${i * S}L${(i + 1) * S} ${(i + 1) * S}`;
+const upper = el('clipPath', { id: 'weaveUpper' }, defs);
+el('path', { d: `M0 0${stairs}L1024 0Z` }, upper);
+const lower = el('clipPath', { id: 'weaveLower' }, defs);
+el('path', { d: `M0 0${stairs}L0 1024Z` }, lower);
+const gu = el('g', { 'clip-path': 'url(#weaveUpper)' }, links);
+el('use', { href: '#linkB' }, gu);
+el('use', { href: '#linkA' }, gu);
+const gl = el('g', { 'clip-path': 'url(#weaveLower)' }, links);
+el('use', { href: '#linkA' }, gl);
+el('use', { href: '#linkB' }, gl);
+</script>

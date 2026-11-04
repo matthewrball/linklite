@@ -1,0 +1,68 @@
+name: Dock compatibility report
+description: My dock works, or doesn't. Either way, tell us which dock and monitors you tried.
+title: "[Dock] "
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        LinkLite has been tested on very few docks. A short report, good or bad, tells other people what to expect and shows where the work is needed.
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Works
+        - Works with problems
+        - Doesn't work
+    validations:
+      required: true
+  - type: input
+    id: dock
+    attributes:
+      label: Dock
+      description: Make and model, as printed on the dock or its box.
+      placeholder: "Humanscale M/Connect 2"
+    validations:
+      required: true
+  - type: input
+    id: usb-id
+    attributes:
+      label: USB vendor and product ID
+      description: System Information › USB, select the dock's DisplayLink device.
+      placeholder: "17e9:600f"
+  - type: textarea
+    id: monitors
+    attributes:
+      label: Monitors
+      description: Each monitor on the dock, with the resolution and refresh rate you used.
+      placeholder: |
+        2x HP Z27k G3, 3840x2160 @ 60 Hz
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: LinkLite version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac model
+      placeholder: "macOS 15.6, MacBook Pro 14-inch M3 Pro"
+    validations:
+      required: true
+  - type: textarea
+    id: dlprobe
+    attributes:
+      label: dlprobe output
+      description: |
+        From a clone of this repository, run `swift run dlprobe --descriptors --product <Product ID>` (the product ID from above, for example `600f`) and paste the output. It only reads what macOS already knows about the dock.
+      render: text
+  - type: textarea
+    id: notes
+    attributes:
+      label: What you saw
+      description: Which monitors lit up, at what resolution, and any glitches, dock resets, or error messages in the LinkLite menu. For a failure, the output of `log show --predicate 'subsystem == "com.ball.linklite"' --last 10m` helps.

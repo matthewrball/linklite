@@ -5,21 +5,23 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>DisplayLink Lite</string>
+	<string>LinkLite</string>
 	<key>CFBundleExecutable</key>
-	<string>DisplayLinkLite</string>
+	<string>LinkLite</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.ball.displaylink-lite</string>
+	<string>com.ball.linklite</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>DisplayLink Lite</string>
+	<string>LinkLite</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>0.1.0</string>
+	<string>0.2.0</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
@@ -27,6 +29,6 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>Licensed under the GNU General Public License, version 2 or later.</string>
+	<string>© 2026 Matthew Ball. Licensed under the GNU General Public License, version 2 or later.</string>
 </dict>
 </plist>

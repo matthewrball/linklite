@@ -1,4 +1,6 @@
-# Same-dock replacement roadmap
+# Development notes
+
+The engineering gate log for LinkLite: the hardware and safety gates the replacement had to pass, with the measured status of each.
 
 The target is intentionally narrow: keep the Humanscale M/Connect 2 (`0x17e9:0x600f`) and replace only the macOS DisplayLink user-space display pipeline with a smaller local implementation.
 
@@ -98,5 +100,5 @@ Protected-content playback is out of scope for the first implementation.
 - [Humanscale M/Connect 2 user guide](https://humanscale.getbynder.com/m/49d81af0b0b26c05/original/hs-technology-tool-m-connect2-user-guide.pdf)
 - [Synaptics DL-6000 series](https://drivers.synaptics.com/products/displaylink-graphics/integrated-chipsets/dl-6000)
 - [FireBurn/Vino clean-room research](https://lwn.net/Articles/1090989/) (drm/vino v3 cover letter; drives DL-6xxx on Linux)
-- [Vino protocol notes](https://github.com/cameron1729/Vino/tree/main/docs) (no root license: observations only)
+- [Vino protocol notes](https://github.com/cameron1729/Vino/tree/main/docs) (the `revdi/` sources LinkLite builds on are vendored in `vendor/vino/` under their per-file GPL-2.0 / GPL-2.0-or-later SPDX headers; see `vendor/vino/UPSTREAM.md`)
 - [DisplayLink Manager 16.2 release notes](https://drivers.synaptics.com/sites/default/files/release_notes/2026-07/DisplayLink%20Manager%20Graphics%20Connectivity16.2-Release%20Notes.txt)

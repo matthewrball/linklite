@@ -10,11 +10,11 @@ let engineLibDir = URL(fileURLWithPath: #filePath)
     .path
 
 let package = Package(
-    name: "displaylink-lite",
+    name: "linklite",
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "dlprobe", targets: ["dlprobe"]),
-        .executable(name: "DisplayLinkLite", targets: ["DisplayLinkLite"])
+        .executable(name: "LinkLite", targets: ["LinkLite"])
     ],
     targets: [
         .target(name: "DLProbeCore"),
@@ -34,7 +34,7 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "DisplayLinkLite",
+            name: "LinkLite",
             dependencies: ["CDLLite"],
             linkerSettings: [
                 .linkedFramework("AppKit"),

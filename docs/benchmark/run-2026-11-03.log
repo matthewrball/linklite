@@ -1,0 +1,16 @@
+18:02:21 phase none start
+18:02:21 lite1 screens: 2 734 -1080 1920 1080; modes: 1920x1080pt@2x=3840x2160px 1920x1080pt@2x=3840x2160px
+18:02:21 phase lite1 settle
+18:02:36 phase lite1 desktop
+18:03:25 phase lite1 animation
+18:04:13 phase none switch
+18:04:15 dlm screens: 2 3432 0 1920 1080; modes: 1920x1080pt@2x=3840x2160px 1920x1080pt@2x=3840x2160px
+18:04:15 phase dlm settle
+18:04:30 phase dlm desktop
+18:05:19 phase dlm animation
+18:06:07 phase none switch
+18:06:12 lite2 screens: 2 734 -1080 1920 1080; modes: 1920x1080pt@2x=3840x2160px 1920x1080pt@2x=3840x2160px
+18:06:12 phase lite2 settle
+18:06:27 phase lite2 desktop
+18:07:15 phase lite2 animation
+18:08:02 DONE: results in /tmp/ll-bench-final

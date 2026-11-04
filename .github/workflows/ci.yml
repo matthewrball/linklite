@@ -1,0 +1,66 @@
+# LinkLite: Continuous Integration
+#
+# Builds and tests the Rust engine, the vendored Vino core, and the Swift package on a hosted
+# Apple Silicon runner. No dock is attached, so this covers the headless tests and that the app
+# builds and links; it does not prove behaviour on hardware. No secrets are used, so the workflow
+# runs the same on forked pull requests.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Match the app's deployment target (scripts/build-app.sh), so libusb's C code built by the
+  # engine does not default to the SDK version.
+  MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+jobs:
+  build-and-test:
+    name: Build and test (macOS 15, Apple Silicon)
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine -> target
+
+      - name: Toolchain versions
+        run: |
+          rustc --version
+          cargo --version
+          swift --version
+
+      - name: Test engine
+        run: cargo test --manifest-path engine/Cargo.toml
+
+      - name: Test vendored Vino core
+        working-directory: engine
+        run: cargo test -p vino-chimera
+
+      - name: Build engine (release)
+        run: cargo build --release --manifest-path engine/Cargo.toml
+
+      - name: Build app (release)
+        run: swift build -c release --product LinkLite
+
+      - name: Test Swift package
+        run: swift test

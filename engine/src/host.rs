@@ -96,32 +96,42 @@ pub struct Mode {
     pub refresh_hz: u32,
 }
 
-/// Geometry a head accepts frames at: the programmed mode, and that mode rounded up to whole
-/// codec strips, which is the raster the dock is sent.
+/// Geometry a head accepts frames at: the programmed mode, that mode rounded up to whole codec
+/// strips (the raster the dock is sent), and the strip size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Accepting {
     width: usize,
     height: usize,
     padded_width: usize,
     padded_height: usize,
+    strip_w: usize,
+    strip_h: usize,
+}
+
+impl Accepting {
+    fn tiles(&self) -> (usize, usize) {
+        (self.padded_width / self.strip_w, self.padded_height / self.strip_h)
+    }
 }
 
 /// A half-open `(x0, y0, x1, y1)` pixel rectangle of a head's surface.
 pub type Rect = (usize, usize, usize, usize);
 
-/// Past this many separate changed areas the whole surface is treated as changed.
-const MAX_DIRTY_RECTS: usize = 64;
-
 #[derive(Default)]
 struct Mailbox {
     accepting: Option<Accepting>,
-    /// Latest captured surface, packed RGB888 at the padded size. Capture rewrites only the areas
-    /// that changed, so a ticking clock costs a few kilobytes rather than a 4K conversion.
+    /// Latest captured surface, packed RGB888 at the padded size.
     surface: Vec<u8>,
-    /// Areas changed since the engine last took the surface; `None` means all of it.
-    dirty: Option<Vec<Rect>>,
-    /// Whether the surface changed since the engine last took it.
-    fresh: bool,
+    /// Hash of each strip's captured BGRA pixels when it was last converted into `surface`.
+    /// Capture reports areas that changed, often far larger than what really did (a terminal
+    /// window for a blinking cursor); hashing the raw pixels per strip finds the strips that
+    /// actually moved, and only those are converted and handed to the codec.
+    strip_hashes: Vec<u64>,
+    /// Strips whose pixels changed since the engine last took the surface.
+    changed: Vec<bool>,
+    changed_count: usize,
+    /// The whole surface is new to the engine (first frame, or a new mode).
+    all_changed: bool,
     /// Latest display-power request not yet acted on.
     power: Option<bool>,
 }
@@ -189,8 +199,8 @@ impl Shared {
         self.notify();
     }
 
-    /// Accept one BGRA frame from the host, of which only `dirty` changed (`None`: all of it).
-    /// Dropped unless it matches the head's programmed mode.
+    /// Accept one BGRA frame from the host, of which only `dirty` can have changed (`None`: any
+    /// of it). Dropped unless it matches the head's programmed mode.
     pub fn submit_frame(
         &self,
         head: usize,
@@ -203,52 +213,109 @@ impl Shared {
         let Some(slot) = self.mailboxes.get(head) else {
             return;
         };
-        let mut mailbox = slot.lock().unwrap();
-        let Some(accepting) = mailbox.accepting else {
+        let mut guard = slot.lock().unwrap();
+        let mailbox = &mut *guard;
+        let Some(a) = mailbox.accepting else {
             return;
         };
         let row_bytes = width * 4;
-        if (accepting.width, accepting.height) != (width, height)
+        if (a.width, a.height) != (width, height)
             || stride < row_bytes
             || height == 0
             || bgra.len() < stride * (height - 1) + row_bytes
         {
             return;
         }
-        let size = accepting.padded_width * 3 * accepting.padded_height;
+        let (tiles_x, tiles_y) = a.tiles();
         let mut dirty = dirty;
-        if mailbox.surface.len() != size {
-            mailbox.surface = vec![0; size];
+        if mailbox.surface.len() != a.padded_width * 3 * a.padded_height {
+            mailbox.surface = vec![0; a.padded_width * 3 * a.padded_height];
+            mailbox.strip_hashes = vec![0; tiles_x * tiles_y];
+            mailbox.changed = vec![false; tiles_x * tiles_y];
+            mailbox.changed_count = 0;
+            mailbox.all_changed = true;
             dirty = None;
         }
-        let areas: Vec<Rect> = match dirty {
-            None => vec![(0, 0, width, height)],
-            Some(rects) => rects
-                .iter()
-                .map(|&(x0, y0, x1, y1)| (x0, y0, x1.min(width), y1.min(height)))
-                .filter(|&(x0, y0, x1, y1)| x0 < x1 && y0 < y1)
-                .collect(),
-        };
-        if areas.is_empty() {
+
+        // Strips the capture says may have changed, grouped by strip row.
+        let mut candidates = vec![false; tiles_x * tiles_y];
+        let mut any = false;
+        let full = [(0, 0, width, height)];
+        for &(x0, y0, x1, y1) in dirty.unwrap_or(&full) {
+            let (x1, y1) = (x1.min(width), y1.min(height));
+            if x0 >= x1 || y0 >= y1 {
+                continue;
+            }
+            for ty in y0 / a.strip_h..y1.div_ceil(a.strip_h) {
+                for tx in x0 / a.strip_w..x1.div_ceil(a.strip_w) {
+                    candidates[ty * tiles_x + tx] = true;
+                    any = true;
+                }
+            }
+        }
+        if !any {
             return;
         }
-        for &area in &areas {
-            bgra_area_to_rgb(bgra, stride, accepting.padded_width, area, &mut mailbox.surface);
-        }
-        let changed = dirty.map(|_| areas);
-        mailbox.dirty = if !mailbox.fresh {
-            changed
-        } else {
-            match (mailbox.dirty.take(), changed) {
-                (Some(mut known), Some(more)) => {
-                    known.extend(more);
-                    (known.len() <= MAX_DIRTY_RECTS).then_some(known)
+
+        // Each strip row owns a disjoint band of the surface, so bands convert in parallel.
+        let band_bytes = a.padded_width * 3 * a.strip_h;
+        let mut bands: Vec<(usize, &mut [u8], &mut [u64], &mut [bool], usize)> = mailbox
+            .surface
+            .chunks_mut(band_bytes)
+            .zip(mailbox.strip_hashes.chunks_mut(tiles_x))
+            .zip(mailbox.changed.chunks_mut(tiles_x))
+            .enumerate()
+            .filter(|(ty, _)| candidates[ty * tiles_x..(ty + 1) * tiles_x].contains(&true))
+            .map(|(ty, ((band, hashes), changed))| (ty, band, hashes, changed, 0))
+            .collect();
+        let work = |(ty, band, hashes, changed, newly): &mut (usize, &mut [u8], &mut [u64], &mut [bool], usize)| {
+            let y0 = *ty * a.strip_h;
+            let rows = a.strip_h.min(height.saturating_sub(y0));
+            for tx in 0..tiles_x {
+                if !candidates[*ty * tiles_x + tx] {
+                    continue;
                 }
-                _ => None,
+                let x0 = tx * a.strip_w;
+                let cols = a.strip_w.min(width - x0);
+                let hash = bgra_strip_hash(bgra, stride, x0, y0, cols, rows);
+                if hash == hashes[tx] {
+                    continue;
+                }
+                hashes[tx] = hash;
+                for dy in 0..rows {
+                    let source = &bgra[(y0 + dy) * stride + x0 * 4..(y0 + dy) * stride + (x0 + cols) * 4];
+                    let target = &mut band[dy * a.padded_width * 3 + x0 * 3..][..cols * 3];
+                    for (rgb, px) in target.chunks_exact_mut(3).zip(source.chunks_exact(4)) {
+                        rgb[0] = px[2];
+                        rgb[1] = px[1];
+                        rgb[2] = px[0];
+                    }
+                }
+                if !changed[tx] {
+                    changed[tx] = true;
+                    *newly += 1;
+                }
             }
         };
-        mailbox.fresh = true;
-        drop(mailbox);
+        let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
+        if workers < 2 || bands.len() < 4 {
+            bands.iter_mut().for_each(work);
+        } else {
+            let per = bands.len().div_ceil(workers);
+            let work = &work;
+            std::thread::scope(|scope| {
+                for group in bands.chunks_mut(per) {
+                    scope.spawn(move || group.iter_mut().for_each(work));
+                }
+            });
+        }
+        let newly: usize = bands.iter().map(|band| band.4).sum();
+        drop(bands);
+        mailbox.changed_count += newly;
+        if newly == 0 && !mailbox.all_changed {
+            return;
+        }
+        drop(guard);
         self.notify();
     }
 
@@ -268,33 +335,50 @@ impl Shared {
         *self.mailboxes[head].lock().unwrap() = Mailbox::default();
     }
 
-    /// Bring `shadow` up to the head's latest surface if it changed, returning what changed
-    /// (`Some(None)`: all of it). Copies only the changed areas.
+    /// Bring `shadow` up to the head's latest surface if it changed, returning the strip-aligned
+    /// areas that changed (`Some(None)`: all of it). Copies only those areas.
     fn take_frame(&self, head: usize, shadow: &mut Vec<u8>) -> Option<Option<Vec<Rect>>> {
-        let mut mailbox = self.mailboxes[head].lock().unwrap();
-        if !mailbox.fresh {
+        let mut guard = self.mailboxes[head].lock().unwrap();
+        let mailbox = &mut *guard;
+        let a = mailbox.accepting?;
+        if !mailbox.all_changed && mailbox.changed_count == 0 {
             return None;
         }
-        mailbox.fresh = false;
-        let dirty = mailbox.dirty.take();
-        let accepting = mailbox.accepting?;
-        match &dirty {
-            Some(rects) if shadow.len() == mailbox.surface.len() => {
-                let row = accepting.padded_width * 3;
-                for &(x0, y0, x1, y1) in rects {
-                    for y in y0..y1 {
-                        let span = y * row + x0 * 3..y * row + x1 * 3;
-                        shadow[span.clone()].copy_from_slice(&mailbox.surface[span]);
-                    }
+        let (tiles_x, _) = a.tiles();
+        if mailbox.all_changed || shadow.len() != mailbox.surface.len() {
+            shadow.clear();
+            shadow.extend_from_slice(&mailbox.surface);
+            mailbox.changed.fill(false);
+            mailbox.changed_count = 0;
+            mailbox.all_changed = false;
+            return Some(None);
+        }
+        // Runs of changed strips along each strip row become one rectangle each.
+        let row = a.padded_width * 3;
+        let mut rects = Vec::new();
+        for (ty, changed) in mailbox.changed.chunks_mut(tiles_x).enumerate() {
+            let mut tx = 0;
+            while tx < tiles_x {
+                if !changed[tx] {
+                    tx += 1;
+                    continue;
                 }
-                Some(dirty)
-            }
-            _ => {
-                shadow.clear();
-                shadow.extend_from_slice(&mailbox.surface);
-                Some(None)
+                let start = tx;
+                while tx < tiles_x && changed[tx] {
+                    changed[tx] = false;
+                    tx += 1;
+                }
+                let (x0, x1) = (start * a.strip_w, tx * a.strip_w);
+                let (y0, y1) = (ty * a.strip_h, (ty + 1) * a.strip_h);
+                for y in y0..y1 {
+                    let span = y * row + x0 * 3..y * row + x1 * 3;
+                    shadow[span.clone()].copy_from_slice(&mailbox.surface[span]);
+                }
+                rects.push((x0, y0, x1, y1));
             }
         }
+        mailbox.changed_count = 0;
+        Some(Some(rects))
     }
 
     fn take_power(&self, head: usize) -> Option<bool> {
@@ -322,38 +406,22 @@ impl Shared {
     }
 }
 
-/// Convert one area of a BGRA8888 frame into the packed RGB888 surface (`padded_width` wide).
-/// Large areas are split across cores by rows. The caller has checked the source geometry.
-fn bgra_area_to_rgb(bgra: &[u8], stride: usize, padded_width: usize, area: Rect, surface: &mut [u8]) {
-    let (x0, y0, x1, y1) = area;
-    let row = padded_width * 3;
-    let convert = |y: usize, target: &mut [u8]| {
-        let source = &bgra[y * stride + x0 * 4..y * stride + x1 * 4];
-        for (rgb, px) in target[x0 * 3..x1 * 3].chunks_exact_mut(3).zip(source.chunks_exact(4)) {
-            rgb[0] = px[2];
-            rgb[1] = px[1];
-            rgb[2] = px[0];
+/// Hash of one strip's BGRA pixels (`cols` x `rows` at `x0, y0`). Change detection only: two
+/// different strips agreeing is vanishingly unlikely, and the same pixels always agree.
+fn bgra_strip_hash(bgra: &[u8], stride: usize, x0: usize, y0: usize, cols: usize, rows: usize) -> u64 {
+    const PRIME: u64 = 0x9e37_79b1_85eb_ca87;
+    let mut h = PRIME;
+    for y in y0..y0 + rows {
+        let line = &bgra[y * stride + x0 * 4..y * stride + (x0 + cols) * 4];
+        let mut words = line.chunks_exact(8);
+        for word in &mut words {
+            h = (h ^ u64::from_le_bytes(word.try_into().unwrap_or([0; 8]))).wrapping_mul(PRIME).rotate_left(31);
         }
-    };
-    let rows = &mut surface[y0 * row..y1 * row];
-    let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
-    if workers < 2 || (x1 - x0) * (y1 - y0) < 512 * 512 {
-        for (i, target) in rows.chunks_exact_mut(row).enumerate() {
-            convert(y0 + i, target);
+        for &byte in words.remainder() {
+            h = (h ^ u64::from(byte)).wrapping_mul(PRIME);
         }
-        return;
     }
-    let band = (y1 - y0).div_ceil(workers);
-    std::thread::scope(|scope| {
-        for (b, chunk) in rows.chunks_mut(band * row).enumerate() {
-            let convert = &convert;
-            scope.spawn(move || {
-                for (i, target) in chunk.chunks_exact_mut(row).enumerate() {
-                    convert(y0 + b * band + i, target);
-                }
-            });
-        }
-    });
+    h | 1 // never 0, which marks a strip whose pixels are not yet known
 }
 
 fn padded(profile: DockProfile, width: usize, height: usize) -> (usize, usize) {
@@ -691,9 +759,10 @@ fn attach(
         session.activate_modes(&requests)?;
     }
     let (padded_width, padded_height) = padded(session.profile(), mode.width, mode.height);
+    let (strip_w, strip_h) = session.profile().strip_dims();
     shared.open(
         usize::from(head),
-        Accepting { width: mode.width, height: mode.height, padded_width, padded_height },
+        Accepting { width: mode.width, height: mode.height, padded_width, padded_height, strip_w, strip_h },
     );
     events.attached(head, &monitor, mode, &edid_bytes, session.profile().hw_cursor());
     outputs[usize::from(head)] = Some(Output {
@@ -836,8 +905,9 @@ fn refresh_topology(
 mod tests {
     use super::*;
 
+    /// A surface whose codec strips are `strip_w` x `strip_h` (1x1 makes every pixel a strip).
     fn accepting(width: usize, height: usize, padded_width: usize, padded_height: usize) -> Accepting {
-        Accepting { width, height, padded_width, padded_height }
+        Accepting { width, height, padded_width, padded_height, strip_w: 1, strip_h: 1 }
     }
 
     #[test]
@@ -880,33 +950,36 @@ mod tests {
         assert!(shared.take_frame(0, &mut shadow).is_none());
     }
 
-    /// Changed areas accumulate until the engine takes them, and only they are copied over.
+    /// Only strips whose pixels really changed reach the engine, whatever area capture reports,
+    /// and they accumulate (as strip-aligned runs) until the engine takes them.
     #[test]
-    fn mailbox_accumulates_changed_areas_between_takes() {
+    fn mailbox_hands_over_only_strips_that_really_changed() {
         let shared = Shared::new();
-        shared.open(0, accepting(4, 2, 4, 2));
+        // 4x2 surface of 2x1 strips: two strips per row.
+        shared.open(0, Accepting { strip_w: 2, ..accepting(4, 2, 4, 2) });
         let mut shadow = Vec::new();
         shared.submit_frame(0, &[1; 32], 16, 4, 2, None);
         assert_eq!(shared.take_frame(0, &mut shadow), Some(None));
         assert_eq!(shadow, vec![1; 24]);
 
-        // Two partial updates before the engine looks: left column, then bottom-right pixel.
+        // Two updates before the engine looks: the left column, then the bottom-right pixel.
+        // A reported pixel converts its whole strip.
         shared.submit_frame(0, &[2; 32], 16, 4, 2, Some(&[(0, 0, 1, 2)]));
         shared.submit_frame(0, &[3; 32], 16, 4, 2, Some(&[(3, 1, 9, 9)]));
-        assert_eq!(shared.take_frame(0, &mut shadow), Some(Some(vec![(0, 0, 1, 2), (3, 1, 4, 2)])));
-        assert_eq!(
-            shadow,
-            [2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1, 1, 3, 3, 3]
-        );
+        assert_eq!(shared.take_frame(0, &mut shadow), Some(Some(vec![(0, 0, 2, 1), (0, 1, 4, 2)])));
+        assert_eq!(shadow, [2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3]);
         assert!(shared.take_frame(0, &mut shadow).is_none());
 
-        // An empty change is not a new frame; a whole-frame change wins over partial ones.
+        // Capture reports a change but the strip's pixels are what it already holds: no frame.
+        shared.submit_frame(0, &[3; 32], 16, 4, 2, Some(&[(2, 1, 4, 2)]));
+        assert!(shared.take_frame(0, &mut shadow).is_none());
+        // An empty report is no frame either.
         shared.submit_frame(0, &[4; 32], 16, 4, 2, Some(&[(0, 0, 0, 0)]));
         assert!(shared.take_frame(0, &mut shadow).is_none());
-        shared.submit_frame(0, &[5; 32], 16, 4, 2, Some(&[(0, 0, 1, 1)]));
-        shared.submit_frame(0, &[6; 32], 16, 4, 2, None);
-        assert_eq!(shared.take_frame(0, &mut shadow), Some(None));
-        assert_eq!(shadow, vec![6; 24]);
+        // No report means anything may have changed: every strip is checked.
+        shared.submit_frame(0, &[3; 32], 16, 4, 2, None);
+        assert_eq!(shared.take_frame(0, &mut shadow), Some(Some(vec![(0, 0, 4, 1), (0, 1, 2, 2)])));
+        assert_eq!(shadow, vec![3; 24]);
     }
 
     #[test]
