@@ -42,8 +42,8 @@ if [[ -n "$identity" ]]; then
     echo "Signing with $identity"
     # Hardened runtime is fine here: the private CGVirtualDisplay classes are ordinary Objective-C
     # classes in CoreGraphics, and the engine is linked statically, so no library validation or
-    # JIT exceptions are needed.
-    codesign --force --options runtime --timestamp=none --sign "$identity" "$app"
+    # JIT exceptions are needed. Notarization requires a secure timestamp.
+    codesign --force --options runtime --timestamp --sign "$identity" "$app"
 else
     echo "No code-signing identity found; signing ad hoc."
     echo "macOS will ask for Screen Recording permission again after every rebuild."
