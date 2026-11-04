@@ -1,0 +1,26 @@
+[package]
+name = "dllite-engine"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-2.0-or-later"
+description = "macOS host engine for DisplayLink DL3 docks: drives the vendored Vino userspace core and exposes a C ABI to the Swift display host."
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+vino-chimera = { path = "../vendor/vino/chimera", features = ["live"] }
+# Build libusb from source and link it statically, so the app does not depend on Homebrew.
+libusb1-sys = { version = "0.7", features = ["vendored"] }
+
+[[bin]]
+name = "dllite-probe"
+path = "src/bin/probe.rs"
+
+[profile.release]
+opt-level = 3
+# No LTO: a staticlib built with LTO carries LLVM bitcode from rustc's LLVM, which Apple's linker
+# cannot read. The Swift host links this archive with Apple's toolchain.
+lto = false
+codegen-units = 1
+debug = 1
