@@ -77,7 +77,7 @@ Run on 2026-11-03: LinkLite 0.2.0 (pre-release build), DisplayLink Manager 16.1.
 ### Reading the results
 
 - **Under load LinkLite keeps the GPU about half as busy** (15% vs 33%, lower in both LinkLite runs). DisplayLink Manager compresses video on the GPU (168 ms of GPU per second in its own process); LinkLite's own process uses no GPU at all.
-- **Memory: 3.8x less** (134 MB vs 513 MB), steady in every phase. App size: 2.6 MB vs 20.6 MB.
+- **Memory: 3.8x less** (134 MB vs 513 MB), steady in every phase. App size: 3.9 MB vs 20.6 MB (LinkLite was 2.6 MB in the measured 0.2.0 build; 0.3.0 adds the updater, and its memory use is unchanged at about 135 MB).
 - **On a quiet desktop both drivers barely touch the GPU.** The second LinkLite desktop phase (19.8%) caught background activity on the Mac; a 20-second spot check right after, with LinkLite still driving both monitors, read 4.3%, in line with the first run (3.8%). Whole-GPU and WindowServer figures include every app, so treat the desktop phase as noisy.
 - **CPU is where DisplayLink Manager wins.** LinkLite encodes on the CPU: about half a core on a live desktop, and about 3.4 cores under full-window 60 fps motion, against 2% and 20% for DisplayLink Manager. Moving LinkLite's encoder to the GPU is the main item on the roadmap.
 

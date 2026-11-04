@@ -24,11 +24,23 @@ bin_dir="$(swift build -c release --show-bin-path)"
 
 app="dist/LinkLite.app"
 rm -rf "$app"
-mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 cp "$bin_dir/LinkLite" "$app/Contents/MacOS/LinkLite"
 printf 'APPL????' > "$app/Contents/PkgInfo"
+
+# Sparkle, the updater. LinkLite is not sandboxed, so Sparkle's XPC services are not needed
+# (https://sparkle-project.org/documentation/sandboxing/).
+sparkle="$app/Contents/Frameworks/Sparkle.framework"
+ditto "$bin_dir/Sparkle.framework" "$sparkle"
+rm -rf "$sparkle/Versions/B/XPCServices" "$sparkle/XPCServices"
+# LinkLite runs on Apple silicon only: keep Sparkle's arm64 code and drop its build-time headers.
+rm -rf "$sparkle/Versions/B/"{Headers,PrivateHeaders,Modules} "$sparkle/"{Headers,PrivateHeaders,Modules}
+for binary in Sparkle Autoupdate Updater.app/Contents/MacOS/Updater; do
+    lipo "$sparkle/Versions/B/$binary" -thin arm64 -output "$sparkle/Versions/B/$binary"
+done
+cp .build/artifacts/sparkle/Sparkle/LICENSE "$app/Contents/Resources/Sparkle-LICENSE.txt"
 
 identity="${LINKLITE_SIGN_IDENTITY:-}"
 if [[ -z "$identity" ]]; then
@@ -39,17 +51,28 @@ if [[ -z "$identity" ]]; then
     done
 fi
 
+# Sign inside out: Sparkle's helpers, the framework, then the app.
+sign() {
+    if [[ -n "$identity" ]]; then
+        # Hardened runtime is fine here: the private CGVirtualDisplay classes are ordinary
+        # Objective-C classes in CoreGraphics, and the engine is linked statically, so no library
+        # validation or JIT exceptions are needed. Notarization requires a secure timestamp.
+        codesign --force --options runtime --timestamp --sign "$identity" "$@"
+    else
+        codesign --force --options runtime --sign - "$@"
+    fi
+}
+
 if [[ -n "$identity" ]]; then
     echo "Signing with $identity"
-    # Hardened runtime is fine here: the private CGVirtualDisplay classes are ordinary Objective-C
-    # classes in CoreGraphics, and the engine is linked statically, so no library validation or
-    # JIT exceptions are needed. Notarization requires a secure timestamp.
-    codesign --force --options runtime --timestamp --sign "$identity" "$app"
 else
     echo "No code-signing identity found; signing ad hoc."
     echo "macOS will ask for Screen Recording permission again after every rebuild."
-    codesign --force --options runtime --sign - "$app"
 fi
+sign "$sparkle/Versions/B/Autoupdate"
+sign "$sparkle/Versions/B/Updater.app"
+sign "$sparkle"
+sign "$app"
 
 codesign --verify --strict --verbose=2 "$app"
 echo "Built $app"

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>LinkLite</title>
+    <link>https://raw.githubusercontent.com/matthewrball/linklite/main/appcast.xml</link>
+    <description>Most recent changes for LinkLite.</description>
+    <language>en</language>
+    <!-- release.sh inserts new <item> elements directly below this line. -->
+    <item>
+      <title>LinkLite 0.3.0</title>
+      <link>https://github.com/matthewrball/linklite/releases/tag/v0.3.0</link>
+      <pubDate>Wed, 04 Nov 2026 02:22:06 +0000</pubDate>
+      <sparkle:version>0.3.0</sparkle:version>
+      <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/matthewrball/linklite/releases/download/v0.3.0/LinkLite-0.3.0.zip"
+                 type="application/octet-stream"
+                 sparkle:edSignature="9m5XbcKkUtNQFz1dfNb4lZzBy726zJlsuMPo/do89rGMGQYQf/JZaAC6QlbBu3i+Na9WxAEBSvWJYHZfqWlQAw==" length="2374095" />
+    </item>
+  </channel>
+</rss>

@@ -19,9 +19,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.0</string>
+	<string>0.3.0</string>
 	<key>CFBundleVersion</key>
-	<string>0.2.0</string>
+	<string>0.3.0</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
@@ -30,5 +30,17 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Matthew Ball. Licensed under the GNU General Public License, version 2 or later.</string>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/matthewrball/linklite/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>Av59QkBwXI8CIZ73tydECNFr3Bnq6ehm5rJTYBTwW70=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

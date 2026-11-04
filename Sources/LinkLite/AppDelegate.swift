@@ -10,6 +10,7 @@ private let log = Logger(subsystem: "com.ball.linklite", category: "app")
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let host = DisplayHost()
+    private let updates = UpdateManager()
     private var statusItem: NSStatusItem?
     private let menu = NSMenu()
     private var workspaceObservers: [NSObjectProtocol] = []
@@ -101,6 +102,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(login)
 
+        if updates.isAvailable {
+            menu.addItem(.separator())
+            let check = actionItem("Check for Updates…", #selector(checkForUpdates))
+            check.isEnabled = updates.canCheckForUpdates
+            menu.addItem(check)
+            let auto = actionItem("Download Updates Automatically", #selector(toggleAutomaticUpdates))
+            auto.state = updates.automaticallyDownloadsUpdates ? .on : .off
+            menu.addItem(auto)
+        }
+
         menu.addItem(.separator())
         let quit = actionItem("Quit LinkLite", #selector(quit))
         quit.keyEquivalent = "q"
@@ -148,6 +159,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             alert.messageText = "Could not change Open at Login"
             alert.runModal()
         }
+        rebuildMenu()
+    }
+
+    @objc private func checkForUpdates() {
+        updates.checkForUpdates()
+    }
+
+    @objc private func toggleAutomaticUpdates() {
+        updates.setAutomaticallyDownloadsUpdates(!updates.automaticallyDownloadsUpdates)
         rebuildMenu()
     }
 

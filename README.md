@@ -8,7 +8,7 @@
   <strong>The lightweight driver for DisplayLink docks on macOS</strong><br>
   <br>
   Drive the monitors on your DisplayLink dock without DisplayLink Manager.<br>
-  One small menu-bar app. No background services, no login-window agent, no telemetry.
+  One small menu-bar app. No background services, no login-window agent, no telemetry. Updates itself.
 </p>
 
 <p align="center">
@@ -26,7 +26,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-dark.png">
-    <img src="docs/assets/benchmark-light.png" alt="LinkLite versus DisplayLink Manager: 2.2x less GPU busy under 60 fps motion, zero GPU in LinkLite's own process, 3.8x less memory, 7.9x smaller app" width="760">
+    <img src="docs/assets/benchmark-light.png" alt="LinkLite versus DisplayLink Manager: 2.2x less GPU busy under 60 fps motion, zero GPU in LinkLite's own process, 3.8x less memory, 5.2x smaller app" width="760">
   </picture>
 </p>
 
@@ -41,16 +41,17 @@
 3. Open LinkLite and allow **Screen & System Audio Recording** when asked ([why?](#why-does-linklite-need-screen-recording)), then quit and reopen it from its menu-bar icon.
 4. Your monitors light up within a few seconds. Turn on **Open at Login** from the menu-bar icon.
 
-Requires macOS 14 Sonoma or later on Apple silicon, and a USB 3 (5 Gbps) link to the dock.
+Requires macOS 14 Sonoma or later on Apple silicon, and a USB 3 (5 Gbps) link to the dock. From then on LinkLite keeps itself up to date.
 
 ## Why LinkLite
-- **Recovers on its own.** Monitors switched on after LinkLite starts are picked up, and if the dock resets or its cable is replugged, your screens come back by themselves.
-- **Light on your Mac.** 3.8x less memory than DisplayLink Manager, a 2.6 MB app instead of 21 MB, and about half the GPU load under heavy motion. LinkLite's own process never touches the GPU. ([Benchmark](docs/BENCHMARK.md))
+
+- **Light on your Mac.** 3.8x less memory than DisplayLink Manager, a 4 MB app instead of 21 MB, and about half the GPU load under heavy motion. LinkLite's own process never touches the GPU. ([Benchmark](docs/BENCHMARK.md))
 - **A clean picture.** Native 4K60 per monitor, sharp HiDPI "looks like" resolutions, and no stale boxes or flicker: changed areas are re-sent to every one of the dock's frame buffers once the screen settles.
 - **The dock draws the pointer.** Moving the mouse sends a few bytes of position data instead of re-encoding the screen around it.
 - **Nothing extra running.** One process. No kernel extension, no login-window agent, no helper services. Quit it and it is gone.
-- **Recovers on its own.** Monitors switched on later are picked up, a dock reset or replugged cable brings your screens back without rearranging your windows, and display sleep turns the monitors off with your Mac's.
-- **Private by construction.** No network access at all, no analytics, no account. See [PRIVACY.md](PRIVACY.md).
+- **Recovers on its own.** Monitors switched on after LinkLite starts are picked up, and if the dock resets or its cable is replugged, your screens come back by themselves.
+- **Stays up to date.** New releases download in the background and install when you say so. Turn it off from the menu-bar icon.
+- **Private by construction.** No analytics, no account. The only network traffic is the update check against this repository. See [PRIVACY.md](PRIVACY.md).
 
 ## The numbers, including where DisplayLink Manager wins
 
@@ -61,7 +62,7 @@ Two 4K monitors, same Mac (Apple M5 Pro, macOS 26.6), same workload, measured ba
 | Whole GPU busy, 60 fps motion | **15%** | 33% |
 | GPU time in the driver's own process | **0 ms/s** | 9–168 ms/s |
 | Memory | **134 MB** | 513 MB |
-| App size | **2.6 MB** | 20.6 MB |
+| App size | **3.9 MB** | 20.6 MB |
 | CPU, live desktop | 55% | **2%** |
 | CPU, 60 fps motion | 338% | **20%** |
 
@@ -117,7 +118,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the toolchain, tests, and diagnostics
 
 ## Privacy and security
 
-No network access, no telemetry, no identifiers. Details in [PRIVACY.md](PRIVACY.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+No telemetry, no identifiers; the only network traffic is the update check. Details in [PRIVACY.md](PRIVACY.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## Credits
 

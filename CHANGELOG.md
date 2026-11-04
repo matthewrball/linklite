@@ -2,6 +2,16 @@
 
 All notable changes to LinkLite are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-11-03
+
+### Added
+
+- Automatic updates. LinkLite checks this repository's releases when it starts and once a day, downloads new versions in the background, verifies their signature, and asks before installing; if you choose Later, the update installs the next time LinkLite quits. **Check for Updates…** and **Download Updates Automatically** are in the menu-bar menu. Updates use [Sparkle](https://sparkle-project.org); see [PRIVACY.md](PRIVACY.md) for what the update check sends.
+
+### Changed
+
+- The app is 3.9 MB, up from 2.6 MB, for the updater.
+
 ## [0.2.0] - 2026-11-03
 
 ### Changed
@@ -31,5 +41,6 @@ First tester build, released as **DisplayLink Lite**.
 - A still screen stays clean, with no stale boxes or flickering patches: changed areas get a follow-up pass once the screen settles, and frames cycle through all three of the dock's buffers.
 - Heavy motion (for example App Exposé on two 4K monitors) does not reset the dock: video across both monitors is held to 100 MB/s.
 
+[0.3.0]: https://github.com/matthewrball/linklite/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/matthewrball/linklite/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/matthewrball/linklite/releases/tag/v0.1.0

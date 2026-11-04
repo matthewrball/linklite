@@ -2,11 +2,18 @@
 
 _Last updated: November 3, 2026 · Applies to the LinkLite macOS application._
 
-LinkLite is a free, open-source macOS app. It has no account system, analytics SDK, advertising, crash reporter, or telemetry, and it makes no network connections. It does not send your settings, display information, usage statistics, or screen contents to its maintainer or to anyone else.
+LinkLite is a free, open-source macOS app. It has no account system, analytics SDK, advertising, crash reporter, or telemetry. Its only network connections are update checks against its GitHub repository. It does not send your settings, display information, usage statistics, or screen contents to its maintainer or to anyone else.
 
 ## Network access
 
-None. LinkLite contains no networking code (no URL loading, sockets, or network frameworks) and talks only to the USB dock it drives, over USB. It does not check for updates; new versions are published on [GitHub](https://github.com/matthewrball/linklite/releases).
+Only for updates. LinkLite uses [Sparkle](https://sparkle-project.org) to check for new versions when it starts and once a day after that:
+
+- It downloads the update feed, `https://raw.githubusercontent.com/matthewrball/linklite/main/appcast.xml`, from GitHub.
+- When the feed lists a newer version, it downloads that release's zip from GitHub Releases, checks its EdDSA signature against the key built into the app, and asks before installing it.
+
+These are plain HTTPS requests. Like any web request they reveal your IP address to GitHub, and they identify the app as LinkLite and its version and the Sparkle version in the `User-Agent` header. LinkLite does not send Sparkle's optional system profile (Mac model, macOS version, CPU), and the maintainer receives nothing: GitHub serves the files, under [GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement).
+
+To turn update checks off, untick **Download Updates Automatically** in the menu-bar menu; **Check for Updates…** still works on demand.
 
 Many docks also contain an Ethernet adapter. LinkLite sends no traffic through it.
 
@@ -18,9 +25,12 @@ LinkLite uses that permission only to capture the virtual displays it created fo
 
 ## Data kept on your Mac
 
-LinkLite stores one setting in its preferences (`UserDefaults`, domain `com.ball.linklite`):
+LinkLite stores its settings in its preferences (`UserDefaults`, domain `com.ball.linklite`):
 
 - `ConfiguredMonitors`: a list of monitor identities, each made of the monitor's vendor ID, product code, and serial number as reported in its EDID (or a hash of the serial text, for monitors that report their serial only as text). LinkLite applies its default "looks like" resolution to a monitor the first time it sees it and records the monitor here, so a resolution you choose later in System Settings is not overwritten.
+- Sparkle's update state, under keys starting with `SU`: when it last checked, whether updates download automatically, and a random number Sparkle uses locally to stagger phased rollouts. None of it is sent anywhere.
+
+Downloaded updates are kept in `~/Library/Caches/com.ball.linklite` until they are installed.
 
 Like any connected monitor, the virtual displays carry their monitor's name, vendor, product, and serial number, so macOS can remember their arrangement and resolution in its own display preferences.
 

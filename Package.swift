@@ -16,6 +16,9 @@ let package = Package(
         .executable(name: "dlprobe", targets: ["dlprobe"]),
         .executable(name: "LinkLite", targets: ["LinkLite"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1")
+    ],
     targets: [
         .target(name: "DLProbeCore"),
         .executableTarget(
@@ -35,11 +38,16 @@ let package = Package(
         ),
         .executableTarget(
             name: "LinkLite",
-            dependencies: ["CDLLite"],
+            dependencies: [
+                "CDLLite",
+                .product(name: "Sparkle", package: "Sparkle")
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("ScreenCaptureKit"),
-                .linkedFramework("ServiceManagement")
+                .linkedFramework("ServiceManagement"),
+                // build-app.sh copies Sparkle.framework into LinkLite.app/Contents/Frameworks.
+                .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])
             ]
         ),
         .testTarget(

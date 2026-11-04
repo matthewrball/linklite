@@ -10,7 +10,7 @@ Please include enough detail to reproduce: LinkLite version, macOS version, Mac 
 
 ## Scope
 
-LinkLite is a local menu-bar app. It talks only to the USB dock it drives: it has no backend, makes no network connections, and collects no data. See [PRIVACY.md](PRIVACY.md).
+LinkLite is a local menu-bar app. It talks to the USB dock it drives and, for updates only, to GitHub: it downloads its update feed and new releases, and installs an update only if its EdDSA signature matches the key built into the app. It has no backend and collects no data. See [PRIVACY.md](PRIVACY.md).
 
 Areas of particular interest:
 
