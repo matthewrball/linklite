@@ -127,10 +127,9 @@ private struct StatusCard: View {
         HStack(spacing: 12) {
             StatusOrb(color: color, breath: breath)
             VStack(alignment: .leading, spacing: 2) {
-                // Breathes with the light: smaller and dimmer as it shrinks, full as it swells.
+                // Fades with the light's breath; its size stays put.
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
-                    .scaleEffect(1 - 0.01 * (1 - breath), anchor: .leading)
                     .opacity(0.92 + 0.08 * breath)
                 if let subtitle {
                     Text(subtitle)
