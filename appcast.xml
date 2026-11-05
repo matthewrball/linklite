@@ -8,6 +8,15 @@
     <description>Most recent changes for LinkLite.</description>
     <language>en</language>
     <!-- release.sh inserts new <item> elements directly below this line. -->
+    <item xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+      <title>LinkLite 0.3.8</title>
+      <link>https://github.com/matthewrball/linklite/releases/tag/v0.3.8</link>
+      <pubDate>Thu, 05 Nov 2026 10:58:12 +0000</pubDate>
+      <sparkle:version>0.3.8</sparkle:version>
+      <sparkle:shortVersionString>0.3.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/matthewrball/linklite/releases/download/v0.3.8/LinkLite-0.3.8.dmg" type="application/octet-stream" sparkle:edSignature="RRZauAgbnMQdZQ8ESbVXXstR6XYMVhoxR+3zIL2M7P3XpYe4yQib/aNrbSxOsCZRCwn0Bhl4AKb+1gA53WfqDg==" length="4251121" />
+    </item>
     <item>
       <title>LinkLite 0.3.7</title>
       <link>https://github.com/matthewrball/linklite/releases/tag/v0.3.7</link>
