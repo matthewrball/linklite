@@ -161,8 +161,12 @@ public enum DescriptorParseError: Error, Equatable {
 
 /// Parses a full USB configuration descriptor (wTotalLength bytes) into interfaces and endpoints.
 public func parseConfigurationDescriptor(_ bytes: [UInt8]) throws -> [InterfaceLayout] {
-    guard bytes.count >= 9, bytes[1] == 0x02 else { throw DescriptorParseError.notConfiguration }
-    let total = min(Int(bytes[2]) | Int(bytes[3]) << 8, bytes.count)
+    guard bytes.count >= 9, bytes[0] >= 9, bytes[1] == 0x02 else {
+        throw DescriptorParseError.notConfiguration
+    }
+    let total = Int(bytes[2]) | Int(bytes[3]) << 8
+    guard total >= Int(bytes[0]) else { throw DescriptorParseError.truncated(offset: 0) }
+    guard total <= bytes.count else { throw DescriptorParseError.truncated(offset: bytes.count) }
     var interfaces: [InterfaceLayout] = []
     var offset = 0
     while offset < total {

@@ -26,6 +26,7 @@ final class PanelModel: ObservableObject {
     @Published var updatesAvailable = false
     @Published var automaticUpdates = false
     @Published var canCheckForUpdates = false
+    @Published var isSettingsExpanded = false
 
     var toggleOpenAtLogin: () -> Void = {}
     var toggleAutomaticUpdates: () -> Void = {}
@@ -39,6 +40,7 @@ private let mint = Color(red: 0.18, green: 0.65, blue: 0.48)
 
 struct PanelView: View {
     @ObservedObject var model: PanelModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -49,11 +51,31 @@ struct PanelView: View {
                     ForEach(model.monitors) { MonitorCard(monitor: $0) }
                 }
             }
-            settings
+            if model.isSettingsExpanded {
+                settings
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .opacity
+                    ))
+            }
+            Divider().padding(.horizontal, 4).opacity(0.5)
             footer
         }
         .padding(14)
         .frame(width: 320)
+        .overlay(alignment: .bottomTrailing) {
+            Button {
+                withAnimation(disclosureAnimation) {
+                    model.isSettingsExpanded.toggle()
+                }
+            } label: {
+                Color.clear.frame(width: 104, height: 56).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(model.isSettingsExpanded ? "Hide settings" : "Show settings")
+            .accessibilityLabel(model.isSettingsExpanded ? "Hide settings" : "Show settings")
+        }
+        .animation(disclosureAnimation, value: model.isSettingsExpanded)
         .tint(mint)
         .glassPanel(cornerRadius: 24)
         // The window is transparent and shadowless; this shadow follows the rounded glass, and the
@@ -63,6 +85,11 @@ struct PanelView: View {
     }
 
     static let shadowMargin: CGFloat = 28
+
+    /// Abendrot's disclosure timing: motion.dur-base and ease-warm.
+    private var disclosureAnimation: Animation? {
+        reduceMotion ? nil : .timingCurve(0.22, 0.61, 0.36, 1, duration: 0.14)
+    }
 
     private var header: some View {
         HStack(spacing: 10) {
@@ -96,6 +123,12 @@ struct PanelView: View {
                     isOn: model.automaticUpdates,
                     action: model.toggleAutomaticUpdates
                 )
+                UpdateRibbonButton(action: model.checkForUpdates)
+                    .disabled(!model.canCheckForUpdates)
+                    .padding(.leading, 40)
+                    .padding(.trailing, 10)
+                    .padding(.top, 2)
+                    .padding(.bottom, 10)
             }
         }
         .padding(.vertical, 4)
@@ -103,14 +136,16 @@ struct PanelView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 4) {
-            if model.updatesAvailable {
-                FooterButton(title: "Check for Updates…", action: model.checkForUpdates)
-                    .disabled(!model.canCheckForUpdates)
-            }
-            Spacer()
-            FooterButton(title: "Quit", shortcut: "⌘Q", action: model.quit)
+        HStack(spacing: 12) {
+            FooterIconButton(title: "Quit LinkLite", symbol: "escape", action: model.quit)
                 .keyboardShortcut("q", modifiers: .command)
+            Spacer()
+            Image(systemName: "chevron.down")
+                .font(.system(size: 13, weight: .medium))
+                .rotationEffect(.degrees(model.isSettingsExpanded ? 180 : 0))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .accessibilityHidden(true)
         }
     }
 }
@@ -305,30 +340,63 @@ private struct SettingRow: View {
     }
 }
 
-private struct FooterButton: View {
+private struct UpdateRibbonButton: View {
+    let action: () -> Void
+    @State private var hovered = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: 3, bottomLeadingRadius: 8,
+            bottomTrailingRadius: 8, topTrailingRadius: 3
+        )
+        Button(action: action) {
+            Text("Check for Updates…")
+                .font(.system(size: 13))
+                .foregroundStyle(.primary.opacity(isEnabled ? (hovered ? 0.95 : 0.72) : 0.3))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(
+                    LinearGradient(
+                        colors: [.primary.opacity(hovered && isEnabled ? 0.11 : 0.07),
+                                 .primary.opacity(0.025)],
+                        startPoint: .top, endPoint: .bottom
+                    ),
+                    in: shape
+                )
+                .overlay(shape.strokeBorder(.primary.opacity(0.07), lineWidth: 0.5))
+                .overlay(alignment: .top) {
+                    Rectangle().fill(.primary.opacity(0.12))
+                        .frame(height: 0.5)
+                        .padding(.horizontal, 4)
+                }
+                .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+    }
+}
+
+private struct FooterIconButton: View {
     let title: String
-    var shortcut: String?
+    let symbol: String
     let action: () -> Void
     @State private var hovered = false
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                Text(title)
-                if let shortcut {
-                    Text(shortcut).foregroundStyle(.tertiary)
-                }
-            }
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.primary.opacity(hovered && isEnabled ? 0.08 : 0), in: Capsule())
-            .contentShape(Capsule())
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.primary.opacity(isEnabled ? (hovered ? 0.85 : 0.55) : 0.22))
+                .frame(width: 28, height: 28)
+                .background(.primary.opacity(hovered && isEnabled ? 0.08 : 0), in: Capsule())
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
+        .help(title)
+        .accessibilityLabel(title)
     }
 }
 

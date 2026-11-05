@@ -13,6 +13,10 @@ vino-chimera = { path = "../vendor/vino/chimera", features = ["live"] }
 # Build libusb from source and link it statically, so the app does not depend on Homebrew.
 libusb1-sys = { version = "0.7", features = ["vendored"] }
 
+# Keep the existing bindings/static backend, with the upstream descriptor safety fixes.
+[patch.crates-io]
+libusb1-sys = { path = "../vendor/libusb1-sys" }
+
 [[bin]]
 name = "dllite-probe"
 path = "src/bin/probe.rs"

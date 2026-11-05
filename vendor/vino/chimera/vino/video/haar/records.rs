@@ -83,9 +83,9 @@ pub(crate) fn record_stats(chunks: &[KVec<u8>]) -> (usize, usize, usize) {
 /// The record stream is chunked internally into small record-aligned buffers. The sink streams
 /// those fragments directly into persistent 65536-byte URBs, so the internal boundaries are
 /// not USB framing. Complete record strides are limited to 4080 bytes.
-pub(crate) fn frame_records(
+pub(crate) fn frame_records<S: AsRef<[u8]>>(
     geometry: Geometry,
-    strips: &[KVec<u8>],
+    strips: &[S],
     connector: u8,
 ) -> Result<KVec<KVec<u8>>> {
     frame_records_with_boundary(geometry, strips, connector, None)
@@ -144,9 +144,9 @@ pub(crate) const NAVARRO_ORDINARY_ROWS: &[u8] = &[
     163, 165, 167, 169, 171, 173, 175, 177, 179,
 ];
 
-pub(crate) fn frame_records_with_boundary(
+pub(crate) fn frame_records_with_boundary<S: AsRef<[u8]>>(
     geometry: Geometry,
-    strips: &[KVec<u8>],
+    strips: &[S],
     connector: u8,
     navarro_ordinary: Option<bool>,
 ) -> Result<KVec<KVec<u8>>> {
@@ -219,7 +219,7 @@ pub(crate) fn frame_records_with_boundary(
         // itself rather than from an assumed full-surface layout. That is what lets a frame
         // carry a *subset* of the surface and still arrive in the order the dock expects --
         // which it must, because this dock will not take a whole surface in one frame.
-        let rank = |s: &KVec<u8>| -> usize {
+        let rank = |s: &[u8]| -> usize {
             let band = (strip_y(s) >> geometry.strip_h_shift()) as u8;
             ELLA_ROWS_1080P
                 .iter()
@@ -236,7 +236,7 @@ pub(crate) fn frame_records_with_boundary(
             let mut b = a;
             while b > 0 {
                 let (l, r) = (idx[b - 1], idx[b]);
-                let key = |n: usize| (rank(&strips[n]), strip_x(&strips[n]));
+                let key = |n: usize| (rank(strips[n].as_ref()), strip_x(strips[n].as_ref()));
                 if key(l) <= key(r) {
                     break;
                 }
@@ -250,7 +250,7 @@ pub(crate) fn frame_records_with_boundary(
     } else if interlaced_bands {
         for pass in 0..2u16 {
             for (n, s) in strips.iter().enumerate() {
-                if (strip_y(s) >> geometry.strip_h_shift()) & 1 == pass {
+                if (strip_y(s.as_ref()) >> geometry.strip_h_shift()) & 1 == pass {
                     order.push(n, GFP_KERNEL)?;
                 }
             }
@@ -262,7 +262,7 @@ pub(crate) fn frame_records_with_boundary(
     }
     let mut i = 0usize;
     while i < order.len() {
-        let y0 = strip_y(&strips[order[i]]);
+        let y0 = strip_y(strips[order[i]].as_ref());
         let mut record: KVec<u8> = KVec::new();
         // Sub bit 4 carries the y-band parity when the selected framing
         // profile requires it.
@@ -279,7 +279,7 @@ pub(crate) fn frame_records_with_boundary(
         // A record ends at a y-band boundary only where the band is part of its identity.
         // Ridge carries the band parity in `sub`, so a record cannot span two bands; Navarro
         // does not, and fills each record to the stride cap instead.
-        while i < order.len() && (!band_parity_bit || strip_y(&strips[order[i]]) == y0) {
+        while i < order.len() && (!band_parity_bit || strip_y(strips[order[i]].as_ref()) == y0) {
             // Preserve DLM's captured producer flushes exactly. They are not a uniform
             // 1024-strip rule: applying that to the final 1552-strip segment added a record
             // at 3072 and made the prologue 210064 bytes instead of 210048. The ordinary
@@ -293,7 +293,7 @@ pub(crate) fn frame_records_with_boundary(
             if interlaced_bands && n > 0 && producer_boundary {
                 break;
             }
-            let s = &strips[order[i]];
+            let s = strips[order[i]].as_ref();
             let projected = record.len() + 2 + s.len();
             let projected_aligned = (projected + 15) & !15;
             if projected_aligned > STRIDE_CAP {

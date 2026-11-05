@@ -24,10 +24,22 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Resources/Info.plist)"
-if grep -q "<sparkle:version>$build</sparkle:version>" appcast.xml; then
+if grep -Fq "<sparkle:version>$build</sparkle:version>" appcast.xml; then
     echo "appcast.xml already lists $build: bump the version in Resources/Info.plist first." >&2
     exit 1
 fi
+
+# Fail before building if the feed cannot receive exactly one new entry.
+marker='<!-- release.sh inserts new <item> elements directly below this line. -->'
+MARKER="$marker" perl -0ne '
+    $count = () = /\Q$ENV{MARKER}\E/g;
+    die "appcast.xml must contain exactly one release marker\n" unless $count == 1;
+' appcast.xml
+
+# Keep the staged feed on the same filesystem for an atomic final rename, and remove
+# notarization uploads on both success and failure.
+workdir="$(mktemp -d .release.XXXXXX)"
+trap 'rm -rf "$workdir"' EXIT
 
 scripts/build-app.sh
 
@@ -37,11 +49,18 @@ dmg="dist/LinkLite-$version.dmg"
 rm -f "$dmg" "$dmg.sha256"
 
 notarize() {
-    xcrun notarytool submit "$1" --keychain-profile "$LINKLITE_NOTARY_PROFILE" --wait
+    local result="$workdir/notarization.plist"
+    xcrun notarytool submit "$1" --keychain-profile "$LINKLITE_NOTARY_PROFILE" --wait \
+        --output-format plist > "$result"
+    if [[ "$(/usr/libexec/PlistBuddy -c 'Print :status' "$result")" != "Accepted" ]]; then
+        cat "$result" >&2
+        echo "Notarization was not accepted for $1." >&2
+        return 1
+    fi
 }
 
 if [[ -n "${LINKLITE_NOTARY_PROFILE:-}" ]]; then
-    upload="$(mktemp -d)/LinkLite.zip"
+    upload="$workdir/LinkLite.zip"
     ditto -c -k --keepParent "$app" "$upload"
     notarize "$upload"
     rm -f "$upload"
@@ -78,6 +97,11 @@ item="$(cat <<EOF
     </item>
 EOF
 )"
-marker='<!-- release.sh inserts new <item> elements directly below this line. -->'
-ITEM="$item" MARKER="$marker" perl -0pi -e 's/\Q$ENV{MARKER}\E/$ENV{MARKER}\n$ENV{ITEM}/' appcast.xml
+# Do not truncate the live feed if generation fails or the marker changed during the build.
+cp -p appcast.xml "$workdir/appcast.xml"
+ITEM="$item" MARKER="$marker" perl -0pi -e '
+    $count = s/\Q$ENV{MARKER}\E/$ENV{MARKER}\n$ENV{ITEM}/g;
+    die "appcast.xml must contain exactly one release marker\n" unless $count == 1;
+' "$workdir/appcast.xml"
+mv -f "$workdir/appcast.xml" appcast.xml
 echo "Added LinkLite $version to appcast.xml"

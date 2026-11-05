@@ -103,10 +103,17 @@ pub extern "C" fn dll_engine_start(callbacks: DLLCallbacks) -> *mut DLLEngine {
     .unwrap_or(std::ptr::null_mut())
 }
 
+/// Count of u32 elements in the C damage array, bounded by Rust's slice byte-length limit.
+fn dirty_len(count: usize) -> Option<usize> {
+    let len = count.checked_mul(4)?;
+    (len.checked_mul(std::mem::size_of::<u32>())? <= isize::MAX as usize).then_some(len)
+}
+
 /// # Safety
-/// `engine` must come from `dll_engine_start` and not yet be stopped; `bgra` must point to at
-/// least `stride * (height - 1) + width * 4` readable bytes; `dirty`, unless null, to
-/// `dirty_count * 4` readable `u32`s.
+/// `engine` must come from `dll_engine_start` and not yet be stopped. For nonempty geometry with
+/// representable lengths, `bgra` must point to at least `stride * (height - 1) + width * 4`
+/// readable bytes; `dirty`, unless null, to `dirty_count * 4` aligned, readable `u32`s.
+/// Neither buffer may be mutated during the call.
 #[no_mangle]
 pub unsafe extern "C" fn dll_engine_submit_frame(
     engine: *mut DLLEngine,
@@ -119,28 +126,32 @@ pub unsafe extern "C" fn dll_engine_submit_frame(
     dirty_count: usize,
 ) {
     let (Some(engine), false) = (unsafe { engine.as_ref() }, bgra.is_null()) else { return };
-    if width == 0 || height == 0 || stride < width as usize * 4 {
-        return;
-    }
-    let len = stride * (height as usize - 1) + width as usize * 4;
-    let pixels = unsafe { std::slice::from_raw_parts(bgra, len) };
-    let rects: Option<Vec<host::Rect>> = (!dirty.is_null()).then(|| {
-        unsafe { std::slice::from_raw_parts(dirty, dirty_count * 4) }
-            .chunks_exact(4)
-            .map(|r| {
-                let (x, y) = (r[0] as usize, r[1] as usize);
-                (x, y, x.saturating_add(r[2] as usize), y.saturating_add(r[3] as usize))
-            })
-            .collect()
-    });
+    let Some(len) = host::frame_len(stride, width as usize, height as usize) else { return };
+    let dirty_len = if dirty.is_null() {
+        0
+    } else {
+        let Some(len) = dirty_len(dirty_count) else { return };
+        len
+    };
     let _ = catch_unwind(AssertUnwindSafe(|| {
+        let pixels = unsafe { std::slice::from_raw_parts(bgra, len) };
+        let full = dirty.is_null().then_some((0, 0, width as usize, height as usize));
+        let quads = if dirty.is_null() {
+            &[][..]
+        } else {
+            unsafe { std::slice::from_raw_parts(dirty, dirty_len) }
+        };
+        let rects = full.into_iter().chain(quads.chunks_exact(4).map(|r| {
+            let (x, y) = (r[0] as usize, r[1] as usize);
+            (x, y, x.saturating_add(r[2] as usize), y.saturating_add(r[3] as usize))
+        }));
         engine.shared.submit_frame(
             usize::from(head),
             pixels,
             stride,
             width as usize,
             height as usize,
-            rects.as_deref(),
+            rects,
         )
     }));
 }
@@ -191,6 +202,8 @@ pub unsafe extern "C" fn dll_engine_move_cursor(engine: *mut DLLEngine, head: i3
 
 /// # Safety
 /// `engine` must come from `dll_engine_start`; it is freed and must not be used afterwards.
+/// The caller must exclude concurrent calls using this engine, and must not stop from a callback
+/// (which runs on the thread this function joins).
 #[no_mangle]
 pub unsafe extern "C" fn dll_engine_stop(engine: *mut DLLEngine) {
     if engine.is_null() {
@@ -200,5 +213,43 @@ pub unsafe extern "C" fn dll_engine_stop(engine: *mut DLLEngine) {
     engine.shared.request_stop();
     if let Some(thread) = engine.thread.take() {
         let _ = thread.join();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dirty_lengths_fit_rust_slices_in_bytes_not_elements() {
+        assert_eq!(dirty_len(0), Some(0));
+        assert_eq!(dirty_len(2), Some(8));
+        let max = isize::MAX as usize / (4 * std::mem::size_of::<u32>());
+        assert_eq!(dirty_len(max), Some(max * 4));
+        assert_eq!(dirty_len(max + 1), None);
+        assert_eq!(dirty_len(usize::MAX / 4 + 1), None);
+        assert_eq!(dirty_len(usize::MAX), None);
+    }
+
+    #[test]
+    fn invalid_frame_lengths_return_before_constructing_slices() {
+        // No engine thread or USB session is needed to exercise the public boundary.
+        let mut engine = DLLEngine { shared: Shared::new(), thread: None };
+        let bgra = [0u8; 4];
+        let dirty = [0u32; 4];
+        unsafe {
+            // Arithmetic overflow, then a representable span above isize::MAX.
+            dll_engine_submit_frame(&mut engine, 0, bgra.as_ptr(), usize::MAX, 1, 3, std::ptr::null(), 0);
+            dll_engine_submit_frame(&mut engine, 0, bgra.as_ptr(), isize::MAX as usize, 1, 2, std::ptr::null(), 0);
+            // An invalid damage count must be rejected before either buffer is interpreted.
+            dll_engine_submit_frame(&mut engine, 0, bgra.as_ptr(), 4, 1, 1, dirty.as_ptr(), usize::MAX);
+            dll_engine_submit_frame(
+                &mut engine, 0, bgra.as_ptr(), 4, 1, 1, dirty.as_ptr(),
+                isize::MAX as usize / (4 * std::mem::size_of::<u32>()) + 1,
+            );
+        }
+        // Rejected input must not poison engine state for later control calls.
+        unsafe { dll_engine_set_display_power(&mut engine, 0, true) };
+        assert!(!engine.shared.stopping());
     }
 }

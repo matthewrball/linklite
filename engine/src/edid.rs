@@ -85,9 +85,9 @@ pub fn parse(edid: &[u8]) -> Result<Monitor, EdidError> {
     // serial-number text descriptor. macOS refuses two virtual displays with the same vendor,
     // product and serial, so two identical models need the text serial to tell them apart.
     let numeric_serial = u32::from_le_bytes([base[12], base[13], base[14], base[15]]);
-    let serial = match (numeric_serial, text(0xff)) {
-        (0, Some(serial_text)) => fnv1a32(serial_text.as_bytes()),
-        (numeric, _) => numeric,
+    let serial = match numeric_serial {
+        0 => text(0xff).map_or(0, |serial_text| fnv1a32(serial_text.as_bytes())),
+        numeric => numeric,
     };
 
     Ok(Monitor {
@@ -118,7 +118,7 @@ fn detailed_timing(d: &[u8]) -> Option<Timing> {
     let v_active = u32::from(d[5]) | (u32::from(d[7] & 0xf0) << 4);
     let v_blank = u32::from(d[6]) | (u32::from(d[7] & 0x0f) << 8);
     let total = (h_active + h_blank) * (v_active + v_blank);
-    if total == 0 {
+    if h_active == 0 || v_active == 0 || total == 0 {
         return None;
     }
     let clock_hz = u64::from(clock_10khz) * 10_000;
@@ -204,5 +204,22 @@ mod tests {
         let mut header = sample();
         header[1] = 0;
         assert_eq!(parse(&header), Err(EdidError::BadHeader));
+    }
+
+    #[test]
+    fn rejects_zero_active_dimensions_even_with_nonzero_blanking() {
+        for horizontal in [true, false] {
+            let mut edid = sample();
+            if horizontal {
+                edid[54 + 2] = 0;
+                edid[54 + 4] &= 0x0f;
+            } else {
+                edid[54 + 5] = 0;
+                edid[54 + 7] &= 0x0f;
+            }
+            edid[127] = 0;
+            edid[127] = 0u8.wrapping_sub(edid.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)));
+            assert_eq!(parse(&edid), Err(EdidError::NoPreferredTiming));
+        }
     }
 }

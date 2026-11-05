@@ -4,7 +4,7 @@ Thanks for your interest. LinkLite is early, and dock compatibility reports are 
 
 ## Getting set up
 
-Requirements: an **Apple Silicon Mac** on **macOS 14** or later, the **Xcode command-line tools** (`xcode-select --install`, Swift 6), and a **Rust** toolchain. Install Rust with [rustup](https://rustup.rs); Homebrew's Rust ships a standard library built for the host macOS version, so an app built with it refuses to run on older macOS releases. `scripts/build-app.sh` prefers rustup's stable toolchain when both are installed.
+Requirements: an **Apple Silicon Mac** supported by **Xcode 26 or newer** (or the corresponding command-line tools with the macOS 26 SDK), and a **Rust** toolchain. Building the Liquid Glass interface needs the newer SDK; the resulting app still targets **macOS 14** and later. Install Rust with [rustup](https://rustup.rs); Homebrew's Rust ships a standard library built for the host macOS version, so an app built with it refuses to run on older macOS releases. `scripts/build-app.sh` prefers rustup's stable toolchain when both are installed.
 
 ```sh
 scripts/build-app.sh          # builds the engine and the app, signs dist/LinkLite.app
@@ -19,6 +19,7 @@ The project is split into:
 
 - **`engine/`**: the dock engine in Rust. USB transport, HDCP 2.2 authentication, encrypted control plane, mode setting, video codec, hardware cursor, and rate limiting, exposed through a C ABI in `engine/include/dllite.h`. libusb is built from source and linked statically.
 - **`vendor/vino/`**: the vendored Vino/chimera userspace DL3 protocol core (GPL-2.0-or-later). See [Changing `vendor/vino/`](#changing-vendorvino).
+- **`vendor/libusb1-sys/`**: the pinned libusb bindings and statically linked native library, with descriptor-parser safety backports. Provenance and refresh requirements are in its [README](vendor/libusb1-sys/README.md).
 - **`Sources/LinkLite/`**: the Swift menu-bar app. Virtual displays, screen capture, pointer tracking, display sleep/wake.
 - **`Sources/CDLLite/`**: the C module that exposes the engine's C ABI and the private CoreGraphics virtual-display classes to Swift.
 - **`Sources/dlprobe/`**, **`Sources/DLProbeCore/`**: a read-only USB preflight tool for checking a dock's link speed and descriptors.
@@ -27,18 +28,24 @@ The project is split into:
 ## Running the tests
 
 ```sh
+# Native USB descriptor safety, without hardware (AddressSanitizer + UndefinedBehaviorSanitizer)
+scripts/test-usb-descriptors.sh
+
 # Engine
-cargo test --manifest-path engine/Cargo.toml
+cargo test --locked --manifest-path engine/Cargo.toml
 
 # Vendored protocol core (builds through engine/, since its optional Linux dependency is not vendored)
-(cd engine && cargo test -p vino-chimera)
+(cd engine && cargo test --locked -p vino-chimera)
 
-# Swift package: the app target links the engine's static library, so build the engine first
-cargo build --release --manifest-path engine/Cargo.toml
-swift test
+# USB transport queue bounds and cancellation ownership
+(cd engine && cargo test --locked -p vino-driver)
+
+# Swift package: build/sign the application first, then exercise the Swift package
+scripts/build-app.sh
+swift test --force-resolved-versions
 ```
 
-CI runs the same steps on an Apple Silicon macOS runner. None of the tests need a dock attached.
+CI runs the same steps on an Apple Silicon macOS 15 runner with Xcode 26.2 selected explicitly. The newer SDK is required to compile Liquid Glass; it does not raise the app's minimum macOS version. None of the tests need a dock attached.
 
 ## Testing on a dock
 

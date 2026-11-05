@@ -1,23 +1,31 @@
 #!/bin/zsh
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# Renders the README benchmark chart (light and dark) from docs/benchmark/results.json.
-# usage: build-chart.sh <LinkLite.app> <DisplayLink Manager.app>   (app sizes for the size panel)
+# Renders the README benchmark and optimization graphics from the checked-in measurements.
+# Usage: docs/assets/src/build-chart.sh (no installed applications or attached dock needed)
 set -euo pipefail
 here="${0:A:h}"
 assets="${here:h}"
 chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-mb() { print -r -- "$(du -sk "$1" | cut -f1) / 1024" | bc -l; }
+profile="$(mktemp -d -t linklite-charts)"
+trap 'rm -rf "$profile"' EXIT
 
-{
-  print -r -- "window.RESULTS = $(cat "$assets/../benchmark/results.json");"
-  print -r -- "window.SIZES = { linklite_mb: $(mb "$1"), dlm_mb: $(mb "$2") };"
-} > "$here/chart-data.js"
-
-for theme in light dark; do
-  "$chrome" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
-    --window-size=880,592 --screenshot="$assets/benchmark-$theme.png" \
-    "file://$here/benchmark.html?theme=$theme" 2>/dev/null
+for graphic in benchmark optimizations; do
+  height=500
+  [[ "$graphic" == optimizations ]] && height=456
+  for theme in light dark; do
+    "$chrome" --headless=new --disable-gpu --hide-scrollbars \
+      --user-data-dir="$profile/chrome" --allow-file-access-from-files \
+      --force-device-scale-factor=2 --virtual-time-budget=2000 \
+      --window-size="880,$height" --screenshot="$profile/$graphic-$theme.png" --dump-dom \
+      "file://$here/benchmark.html?view=$graphic&theme=$theme" \
+      > "$profile/$graphic-$theme.html" 2> "$profile/$graphic-$theme.log"
+    if ! grep -q 'data-rendered="true"' "$profile/$graphic-$theme.html"; then
+      echo "Chart data did not render: $graphic ($theme)" >&2
+      cat "$profile/$graphic-$theme.log" >&2
+      exit 1
+    fi
+  done
 done
-rm -f "$here/chart-data.js"
-print "Rendered $assets/benchmark-light.png and benchmark-dark.png"
+mv "$profile"/{benchmark,optimizations}-{light,dark}.png "$assets/"
+print "Rendered light and dark benchmark and optimization graphics"

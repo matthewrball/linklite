@@ -84,3 +84,32 @@ Run on 2026-11-03: LinkLite 0.2.0 (pre-release build), DisplayLink Manager 16.1.
 ### Capture path
 
 LinkLite captures with ScreenCaptureKit. The older `CGDisplayStream`, which DisplayLink Manager also links, was measured as an alternative on the same animation: one extra capture of a 4K display cost WindowServer about 25 ms/s of GPU with ScreenCaptureKit and about 17 ms/s with `CGDisplayStream`. The difference is small, and `CGDisplayStream` is obsoleted in the macOS 15 SDK, so LinkLite stays on ScreenCaptureKit.
+
+## Hardware-free optimization checks — 2026-11-04
+
+These are local, narrowly scoped measurements of the unreleased engineering changes, not a rerun of the two-monitor A/B benchmark above.
+
+| Scenario | Before | After |
+|---|---:|---:|
+| Hidden searching panel: process CPU over six seconds | 9.54% | 0.18% |
+| Pack 50 identical cached 3840×2160 Ridge frames, optimized Rust build | 204.1 ms | 119.2 ms |
+
+The panel measurement launched the production SwiftUI panel and controller in a temporary native host, showed it, dismissed it, waited one second for the fade to finish, then sampled process CPU time with `getrusage`. Both versions used the same searching state. Releasing the hidden view tree stops its repeating status animation. This measures panel overhead, not the USB engine or an attached-display workload.
+
+The packing comparison exercised the former double-copy path and the borrowed-body path against the same patterned RGB frame and cached encoded strips. The new path avoids 16,200 strip-body allocations and 41,988,360 copied body bytes per such full frame; this is allocation/copy traffic, not retained memory. The byte-equivalence regression remains in `vendor/vino`; the temporary timing harness was removed.
+
+Capture smoke checks exercised initial/full, partial, empty, and scaled damage through the actual Swift callback. Cursor checks compared reused-buffer output byte-for-byte and checked hotspots at 1× and 2×. No full-application RSS reduction, USB throughput gain, eight-hour stability result, hotplug result, or older-macOS compatibility result is claimed by these checks.
+
+## README graphics
+
+The lead graphic uses the saved real-dock results in [`benchmark/results.json`](benchmark/results.json), not the unreleased component checks. The memory headline compares each driver's mean memory across desktop and animation: `100 × (1 − 134.0549 / 512.8444) = 73.86%`, rounded to **74% less memory**. The supporting whole-GPU-busy figure under motion is `100 × (1 − 15.2308 / 32.9556) = 53.78%`, rounded to **54% lower**. Neither is a new measurement of the optimized build.
+
+The separate optimization graphic reads [`benchmark/optimizations-2026-11-04.json`](benchmark/optimizations-2026-11-04.json), which records the rounded measurements and structural counts described above. Its CPU reduction applies only to the hidden-panel host; its packing-time reduction is not an increase in display frame rate. The copied-byte count is for the synthetic full-frame case, not retained RAM.
+
+Regenerate both graphics in light and dark with:
+
+```sh
+docs/assets/src/build-chart.sh
+```
+
+The renderer uses Google Chrome and a temporary browser profile. It needs neither installed driver applications nor a connected dock, and it publishes the four PNGs only after their measurement data has rendered.

@@ -22,45 +22,58 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Liquid Glass needs the macOS 26 SDK even though the app also runs on older macOS.
+  DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
   # Match the app's deployment target (scripts/build-app.sh), so libusb's C code built by the
   # engine does not default to the SDK version.
   MACOSX_DEPLOYMENT_TARGET: "14.0"
 
 jobs:
   build-and-test:
-    name: Build and test (macOS 15, Apple Silicon)
+    name: Build and test (macOS 15, Xcode 26.2, Apple Silicon)
     runs-on: macos-15
     timeout-minutes: 30
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
       - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
         with:
           workspaces: engine -> target
 
       - name: Toolchain versions
         run: |
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
           rustc --version
           cargo --version
           swift --version
 
+      - name: Test native USB descriptor boundaries (ASan/UBSan)
+        run: scripts/test-usb-descriptors.sh
+
       - name: Test engine
-        run: cargo test --manifest-path engine/Cargo.toml
+        run: cargo test --locked --manifest-path engine/Cargo.toml
 
       - name: Test vendored Vino core
         working-directory: engine
-        run: cargo test -p vino-chimera
+        run: cargo test --locked -p vino-chimera
+
+      - name: Test USB transport ownership
+        working-directory: engine
+        run: cargo test --locked -p vino-driver
 
       - name: Build engine (release)
-        run: cargo build --release --manifest-path engine/Cargo.toml
+        run: cargo build --locked --release --manifest-path engine/Cargo.toml
 
       - name: Build app (release)
-        run: swift build -c release --product LinkLite
+        run: swift build --force-resolved-versions -c release --product LinkLite
 
       - name: Test Swift package
-        run: swift test
+        run: swift test --force-resolved-versions

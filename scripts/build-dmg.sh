@@ -10,6 +10,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 app="${1:?usage: build-dmg.sh <LinkLite.app> <output.dmg>}"
 dmg="${2:?usage: build-dmg.sh <LinkLite.app> <output.dmg>}"
+# Pass paths rather than option-like relative names to rm, codesign, and dmgbuild.
+[[ "$app" = /* ]] || app="$PWD/$app"
+[[ "$dmg" = /* ]] || dmg="$PWD/$dmg"
 command -v dmgbuild >/dev/null || { echo "dmgbuild not found: pipx install dmgbuild" >&2; exit 1; }
 codesign --verify --deep --strict "$app"
 

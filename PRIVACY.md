@@ -1,19 +1,19 @@
 # Privacy Policy
 
-_Last updated: November 3, 2026 · Applies to the LinkLite macOS application._
+_Last updated: November 4, 2026 · Applies to the LinkLite macOS application._
 
-LinkLite is a free, open-source macOS app. It has no account system, analytics SDK, advertising, crash reporter, or telemetry. Its only network connections are update checks against its GitHub repository. It does not send your settings, display information, usage statistics, or screen contents to its maintainer or to anyone else.
+LinkLite is a free, open-source macOS app. It has no account system, analytics SDK, advertising, crash reporter, or telemetry. Its only network connections are update checks and downloads from GitHub. It does not send your settings, display information, usage statistics, or screen contents to its maintainer or to anyone else.
 
 ## Network access
 
 Only for updates. LinkLite uses [Sparkle](https://sparkle-project.org) to check for new versions when it starts and once a day after that:
 
 - It downloads the update feed, `https://raw.githubusercontent.com/matthewrball/linklite/main/appcast.xml`, from GitHub.
-- When the feed lists a newer version, it downloads that release's disk image from GitHub Releases, checks its EdDSA signature against the key built into the app, and asks before installing it.
+- When the feed lists a newer version, it downloads that release's disk image from GitHub Releases, authenticates it before extraction, and asks before installing it. Official releases are EdDSA-signed with the key built into the app and signed with the maintainer's Apple Developer ID. Sparkle also allows same-Developer-ID validation for update-key rotation.
 
 These are plain HTTPS requests. Like any web request they reveal your IP address to GitHub, and they identify the app as LinkLite and its version and the Sparkle version in the `User-Agent` header. LinkLite does not send Sparkle's optional system profile (Mac model, macOS version, CPU), and the maintainer receives nothing: GitHub serves the files, under [GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement).
 
-To turn update checks off, switch off **Automatic updates** in the menu-bar panel; **Check for Updates…** still works on demand.
+To turn update checks off, expand settings with the chevron in the menu-bar panel and switch off **Automatic updates**. **Check for Updates…**, directly beneath it, still works on demand.
 
 Many docks also contain an Ethernet adapter. LinkLite sends no traffic through it.
 

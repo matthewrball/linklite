@@ -1,72 +1,134 @@
 <!doctype html>
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
-<!-- Benchmark chart for the README. Rendered by build-chart.sh from docs/benchmark/results.json.
-     ?theme=dark selects the dark variant. -->
+<!-- README performance graphics. build-chart.sh renders both views in light and dark. -->
+<html lang="en">
 <meta charset="utf-8">
-<script src="chart-data.js"></script>
+<title>LinkLite performance</title>
 <style>
   :root {
     --bg: #f4efe3; --card: #fbf8f0; --ink: #1b2350; --muted: #6a6f86; --line: #e2dccb;
-    --lite: #2fa77a; --lite-hi: #5fd3a3; --dlm: #b9b4a6;
+    --lite: #23845f; --lite-hi: #5fd3a3; --other: #b9b4a6;
   }
   :root.dark {
-    --bg: #0f1530; --card: #161e3f; --ink: #f1ecdf; --muted: #9aa3c7; --line: #26305a;
-    --lite: #4fd1a0; --lite-hi: #8bf0c6; --dlm: #4a5378;
+    --bg: #0f1530; --card: #161e3f; --ink: #f1ecdf; --muted: #a4adcc; --line: #26305a;
+    --lite: #4fd1a0; --lite-hi: #8bf0c6; --other: #566184;
   }
+  * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); }
-  body { width: 880px; padding: 34px 36px 28px; box-sizing: border-box; font: 15px/1.4 -apple-system, system-ui, "Helvetica Neue", sans-serif; color: var(--ink); }
-  h1 { font: 700 26px/1.2 -apple-system, system-ui, "SF Pro Display", "Helvetica Neue", sans-serif; letter-spacing: -0.02em; margin: 0 0 6px; }
-  .sub { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 18px 14px; }
-  .card h2 { font: 600 12px/1 -apple-system, system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 12px; }
-  .big { font: 700 32px/1 -apple-system, system-ui, "SF Pro Display", "Helvetica Neue", sans-serif; letter-spacing: -0.02em; color: var(--lite); margin-bottom: 4px; }
-  .big small { font-size: 15px; color: var(--muted); font-weight: 500; letter-spacing: 0; }
-  .group { margin-top: 10px; }
-  .group-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-  .row { display: grid; grid-template-columns: 116px 1fr 74px; align-items: center; gap: 8px; margin: 5px 0; font-size: 13px; }
-  .bar { height: 14px; border-radius: 7px; background: var(--line); overflow: hidden; }
-  .fill { height: 100%; border-radius: 7px; min-width: 3px; }
+  body {
+    width: 880px; height: 500px; padding: 30px 36px 24px;
+    display: flex; flex-direction: column;
+    font: 15px/1.4 -apple-system, system-ui, "Helvetica Neue", sans-serif; color: var(--ink);
+  }
+  .eyebrow { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+  .badge { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; letter-spacing: 0.06em; }
+  h1 { font-size: 68px; line-height: 1.05; letter-spacing: -0.045em; margin: 0 0 8px; font-weight: 700; }
+  .accent { color: var(--lite); }
+  .sub { color: var(--muted); margin: 0 0 24px; font-size: 18px; }
+  .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+  h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.055em; color: var(--muted); margin: 0 0 14px; }
+  .big { font-size: 34px; font-weight: 700; line-height: 1.1; letter-spacing: -0.025em; margin: 0 0 14px; color: var(--lite); }
+  .big small { font-size: 15px; font-weight: 500; letter-spacing: 0; color: var(--ink); }
+  .row { display: grid; grid-template-columns: 110px 1fr 62px; align-items: center; gap: 8px; margin: 9px 0; font-size: 12px; }
+  .bar { height: 11px; border-radius: 6px; background: var(--line); overflow: hidden; }
+  .fill { height: 100%; border-radius: inherit; background: var(--other); }
   .fill.lite { background: linear-gradient(90deg, var(--lite), var(--lite-hi)); }
-  .fill.dlm { background: var(--dlm); }
-  .val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
   .name.lite { font-weight: 700; }
-  .foot { margin-top: 16px; color: var(--muted); font-size: 12px; }
-  .foot b { color: var(--ink); font-weight: 600; }
+  .val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .context { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 12px 0 0; }
+  .foot { margin: auto 0 0; padding-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+  .foot strong { color: var(--ink); font-weight: 600; }
+  body.optimizations { height: 456px; }
+  .optimizations .eyebrow { margin-bottom: 12px; }
+  .optimizations h1 { font-size: 28px; letter-spacing: -0.025em; margin-bottom: 20px; }
+  .optimizations .grid { grid-template-columns: 1fr 1fr; }
+  .optimizations h2 { margin-bottom: 6px; }
+  .optimizations .context { margin: 0 0 12px; }
+  .optimizations .row { grid-template-columns: 52px 1fr 76px; }
+  .copy-strip { display: flex; align-items: center; gap: 18px; margin-top: 14px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 12px; }
+  .copy-strip > strong { color: var(--lite); font-size: 30px; line-height: 1; white-space: nowrap; letter-spacing: -0.025em; }
+  .copy-strip b { display: block; font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+  .copy-strip span { display: block; color: var(--muted); font-size: 12px; }
 </style>
-<h1>Lighter on your Mac than DisplayLink Manager</h1>
-<p class="sub">Two 4K monitors on a DisplayLink DL-6xxx dock, same Mac, same workload, measured back to back.</p>
-<div class="grid">
-  <div class="card" id="gpu"><h2>Whole GPU busy, 60 fps motion</h2></div>
-  <div class="card" id="own"><h2>GPU time used by the driver itself</h2></div>
-  <div class="card" id="mem"><h2>Memory</h2></div>
-  <div class="card" id="size"><h2>App size</h2></div>
-</div>
-<p class="foot" id="foot"></p>
-<script>
-  if (location.search.includes("theme=dark")) document.documentElement.classList.add("dark");
-  const R = window.RESULTS, L = R["LinkLite"], D = R["DisplayLink Manager"], S = window.SIZES;
-  const bars = (label, lite, dlm, unit, digits = 0) => {
-    const max = Math.max(lite, dlm, 1e-9) * 1.05;
-    const row = (name, v, cls) => `<div class="row"><span class="name ${cls}">${name}</span>
-      <div class="bar"><div class="fill ${cls}" style="width:${(v / max) * 100}%"></div></div>
-      <span class="val">${v.toFixed(digits)}${unit}</span></div>`;
-    return `<div class="group">${label ? `<div class="group-label">${label}</div>` : ""}
-      ${row("LinkLite", lite, "lite")}${row("DisplayLink Mgr", dlm, "dlm")}</div>`;
+<body>
+<header id="header"></header>
+<main id="content"></main>
+<footer class="foot" id="foot"></footer>
+<script type="module">
+  const query = new URLSearchParams(location.search);
+  document.documentElement.classList.toggle("dark", query.get("theme") === "dark");
+  const optimizations = query.get("view") === "optimizations";
+  document.body.classList.toggle("optimizations", optimizations);
+  const path = optimizations ? "../../benchmark/optimizations-2026-11-04.json" : "../../benchmark/results.json";
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`Cannot load chart measurements: ${response.status}`);
+  const data = await response.json();
+  const reduction = (before, after) => Math.round(100 * (1 - after / before));
+  const compare = (labels, values, classes, unit, digits = 0) => {
+    const max = Math.max(...values);
+    return values.map((value, index) => `<div class="row">
+      <span class="name ${classes[index]}">${labels[index]}</span>
+      <div class="bar"><div class="fill ${classes[index]}" style="width:${value / max * 100}%"></div></div>
+      <span class="val">${value.toFixed(digits)}${unit}</span>
+    </div>`).join("");
   };
-  const ratio = (a, b) => (b / a).toFixed(1).replace(/\.0$/, "");
-  const A = (d) => d.animation;
-  const mem = (d) => (d.desktop.driver_mem_mb + d.animation.driver_mem_mb) / 2;
-  document.getElementById("gpu").innerHTML += `<div class="big">${ratio(A(L).gpu_util_pct, A(D).gpu_util_pct)}× <small>less GPU under load</small></div>
-    ${bars("", A(L).gpu_util_pct, A(D).gpu_util_pct, "%")}`;
-  document.getElementById("own").innerHTML += `<div class="big">Zero <small>GPU in LinkLite's own process</small></div>
-    ${bars("Live desktop", L.desktop.driver_gpu_ms_per_s, D.desktop.driver_gpu_ms_per_s, " ms/s")}
-    ${bars("60 fps motion", A(L).driver_gpu_ms_per_s, A(D).driver_gpu_ms_per_s, " ms/s")}`;
-  document.getElementById("mem").innerHTML += `<div class="big">${ratio(mem(L), mem(D))}× <small>less memory</small></div>
-    ${bars("", mem(L), mem(D), " MB")}`;
-  document.getElementById("size").innerHTML += `<div class="big">${ratio(S.linklite_mb, S.dlm_mb)}× <small>smaller</small></div>
-    ${bars("", S.linklite_mb, S.dlm_mb, " MB", 1)}`;
-  document.getElementById("foot").innerHTML = `GPU busy % and GPU time from the Apple GPU driver; memory is the driver's own processes. `
-    + `On an idle desktop both drivers keep the GPU near idle, and DisplayLink Manager uses less CPU because it encodes on the GPU. `
-    + `Full results, including CPU: <b>docs/BENCHMARK.md</b>.`;
+  if (optimizations) {
+    const p = data.hidden_panel, f = data.cached_frame_packing, work = data.avoided_work;
+    document.getElementById("header").innerHTML = `
+      <div class="eyebrow"><span>LinkLite · Engineering checks</span><span class="badge">${data.status}</span></div>
+      <h1>Measured before and after.</h1>`;
+    document.getElementById("content").innerHTML = `
+      <div class="grid">
+        <section class="card">
+          <h2>Hidden searching-panel CPU</h2>
+          <p class="context">Closed menu · ${p.sample_seconds}-second CPU sample</p>
+          <div class="big">${reduction(p.before_cpu_pct, p.after_cpu_pct)}% <small>less panel CPU</small></div>
+          ${compare(["Before", "After"], [p.before_cpu_pct, p.after_cpu_pct], ["", "lite"], "%", 2)}
+        </section>
+        <section class="card">
+          <h2>Cached-frame packing time</h2>
+          <p class="context">${f.iterations} synthetic 4K frames · optimized build</p>
+          <div class="big">${reduction(f.before_ms, f.after_ms)}% <small>less packing time</small></div>
+          ${compare(["Before", "After"], [f.before_ms, f.after_ms], ["", "lite"], " ms", 1)}
+        </section>
+      </div>
+      <div class="copy-strip">
+        <strong>${Math.round(work.copied_bytes_per_frame / 1048576)} MiB</strong>
+        <div><b>of duplicate copying avoided per synthetic full frame</b>
+          <span>${work.strip_body_allocations_per_frame.toLocaleString("en-US")} fewer temporary strip-body allocations in that case—not retained RAM.</span></div>
+      </div>`;
+    document.getElementById("foot").textContent =
+      `Hardware-free checks · ${data.date}. Not a whole-app RAM, FPS, or live-dock benchmark.`;
+  } else {
+    const lite = data.LinkLite, dlm = data["DisplayLink Manager"];
+    const memory = driver => (driver.desktop.driver_mem_mb + driver.animation.driver_mem_mb) / 2;
+    const liteMemory = memory(lite), dlmMemory = memory(dlm);
+    const labels = ["LinkLite", "DisplayLink Mgr"], classes = ["lite", ""];
+    document.getElementById("header").innerHTML = `
+      <div class="eyebrow"><span>LinkLite · Real-dock benchmark</span><span>Two 4K monitors</span></div>
+      <h1><span class="accent">${reduction(dlmMemory, liteMemory)}%</span> less memory</h1>
+      <p class="sub">than DisplayLink Manager, measured on the same Mac.</p>`;
+    document.getElementById("content").innerHTML = `
+      <div class="grid">
+        <section class="card">
+          <h2>Driver memory footprint</h2>
+          <div class="big">${Math.round(liteMemory)} MB <small>vs ${Math.round(dlmMemory)} MB</small></div>
+          ${compare(labels, [liteMemory, dlmMemory], classes, " MB")}
+          <p class="context">Mean of live-desktop and motion phases.</p>
+        </section>
+        <section class="card">
+          <h2>Whole GPU busy, under motion</h2>
+          <div class="big">${reduction(dlm.animation.gpu_util_pct, lite.animation.gpu_util_pct)}% <small>lower</small></div>
+          ${compare(labels, [lite.animation.gpu_util_pct, dlm.animation.gpu_util_pct], classes, "%")}
+          <p class="context">60 fps animation on the same displays.</p>
+        </section>
+      </div>`;
+    document.getElementById("foot").innerHTML = `
+      November 3, 2026 · Apple M5 Pro · macOS 26.6 · LinkLite 0.2.0 vs DisplayLink Manager 16.1.25.<br>
+      <strong>CPU use is higher in LinkLite.</strong> Historical baseline, before the latest optimizations. Full method: docs/BENCHMARK.md.`;
+  }
+  document.documentElement.dataset.rendered = "true";
 </script>
+</body>
+</html>

@@ -235,10 +235,10 @@ impl HeadScanout {
             self.body_hashes[index] = self.pending[index];
         }
 
-        let mut strips: Vec<Vec<u8>> = Vec::with_capacity(coords.len());
+        let mut strips: Vec<&[u8]> = Vec::with_capacity(coords.len());
         for &(sx, sy) in &coords {
             let index = (sy / strip_h) * tiles_x + (sx / strip_w);
-            strips.push(self.bodies[index].clone().expect("body cached above"));
+            strips.push(self.bodies[index].as_deref().expect("body cached above"));
         }
         Ok(Some(Frame {
             records: kvino::frame_records(self.dock, &strips, head)?,

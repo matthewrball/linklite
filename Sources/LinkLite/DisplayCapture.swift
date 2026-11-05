@@ -34,6 +34,8 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
     private var loggedSizeMismatch = false
     /// Set once the stream's first frame has been sent whole; touched only on the capture queue.
     private var sentFirstFrame = false
+    /// Reused on the serial capture queue; the engine only borrows it during submitFrame.
+    private var dirtyRects: [UInt32] = []
 
     private init(head: UInt8, width: UInt32, height: UInt32, engine: EngineHandle,
                  onStop: @escaping @Sendable (Error) -> Void) {
@@ -128,15 +130,17 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         let unscaled = (info[.contentScale] as? CGFloat).map { abs($0 - 1) < 0.001 } ?? false
         var dirty: [UInt32]?
         if sentFirstFrame, unscaled, let reported = info[.dirtyRects] as? [NSDictionary] {
-            dirty = []
-            dirty?.reserveCapacity(reported.count * 4)
+            dirtyRects.removeAll(keepingCapacity: true)
+            dirtyRects.reserveCapacity(reported.count * 4)
             for entry in reported {
                 guard let rect = CGRect(dictionaryRepresentation: entry)?.integral, !rect.isEmpty else { continue }
-                dirty? += [UInt32(max(0, rect.minX)), UInt32(max(0, rect.minY)),
-                           UInt32(rect.width), UInt32(rect.height)]
+                dirtyRects.append(UInt32(max(0, rect.minX)))
+                dirtyRects.append(UInt32(max(0, rect.minY)))
+                dirtyRects.append(UInt32(rect.width))
+                dirtyRects.append(UInt32(rect.height))
             }
+            dirty = dirtyRects
         }
-        sentFirstFrame = true
 
         guard CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly) == kCVReturnSuccess else { return }
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
@@ -144,6 +148,7 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         engine.submitFrame(head: head, bgra: base.assumingMemoryBound(to: UInt8.self),
                            stride: CVPixelBufferGetBytesPerRow(pixelBuffer),
                            width: frameWidth, height: frameHeight, dirty: dirty)
+        sentFirstFrame = true
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {

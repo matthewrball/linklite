@@ -2,9 +2,10 @@
 //
 // C ABI between the Rust dock engine (libdllite_engine.a) and the Swift display host.
 //
-// Threading: callbacks run on the engine's own thread. Every dll_engine_* function may be called
-// from any thread. Strings and buffers passed to callbacks are valid only for the callback's
-// duration; copy what you keep.
+// Threading: callbacks run on the engine's own thread. Functions other than dll_engine_stop may
+// be called concurrently from any thread while the engine is alive. Stop must be serialized
+// against all other calls and must not run from a callback. Strings and buffers passed to
+// callbacks are valid only for the callback's duration; copy what you keep.
 
 #ifndef DLLITE_H
 #define DLLITE_H
@@ -68,8 +69,12 @@ DLLEngine *dll_engine_start(DLLCallbacks callbacks);
 /// Hand the engine the newest frame for a head: BGRA8888, top row first, stride in bytes.
 /// `dirty` lists the areas that changed since the previous frame as dirty_count (x, y, width,
 /// height) quads in frame pixels; pass NULL when that is unknown (the whole frame is read).
-/// The changed pixels are copied before this returns. Frames whose size differs from the head's
-/// programmed mode are dropped.
+/// A non-NULL dirty pointer with dirty_count == 0 means no changed areas.
+/// For valid nonempty geometry, bgra must contain at least stride * (height - 1) + width * 4
+/// readable bytes, and dirty, unless NULL, must contain dirty_count * 4 aligned uint32_t values.
+/// Both buffers must remain valid and unmodified until this returns. The changed pixels are
+/// copied before returning. Frames with invalid or unrepresentable lengths, or whose size
+/// differs from the head's programmed mode, are dropped.
 void dll_engine_submit_frame(DLLEngine *engine, uint8_t head, const uint8_t *bgra, size_t stride,
                              uint32_t width, uint32_t height, const uint32_t *dirty,
                              size_t dirty_count);
@@ -87,7 +92,8 @@ void dll_engine_set_cursor(DLLEngine *engine, const uint8_t *bgra, uint32_t widt
 void dll_engine_move_cursor(DLLEngine *engine, int32_t head, int32_t x, int32_t y);
 
 /// Blank every head, release the dock, join the engine thread, and free the engine.
-/// No callback runs after this returns.
+/// No callback runs after this returns. Must not be called from a callback. Before calling,
+/// exclude all other calls using this engine, including another stop; never use it afterwards.
 void dll_engine_stop(DLLEngine *engine);
 
 #ifdef __cplusplus

@@ -2,6 +2,25 @@
 
 All notable changes to LinkLite are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Quieter menu-bar controls: Quit is an icon, settings expand with an animated chevron, and Check for Updates sits beneath Automatic updates in a beveled strip. Keyboard shortcuts and update behavior are unchanged.
+- Release the panel's SwiftUI view tree after dismissal so its status pulse does not continue consuming CPU while hidden.
+- Reuse capture damage, strip-candidate, and cursor-image buffers; pack cached video strips and USB transfers without redundant full-body copies.
+- Build with locked dependency versions and select the rustup compiler consistently, avoiding Homebrew standard-library deployment-target mismatches.
+- The README leads with the measured memory saving versus DisplayLink Manager, with updated light/dark graphics and a separate, explicitly unreleased optimization section.
+
+### Fixed
+
+- CI selects Xcode 26.2 instead of the macOS 15 runner's default Xcode 16.4, which cannot compile the Liquid Glass APIs. The app's macOS 14 deployment target is unchanged.
+- Keep cancelled USB transfers alive until their callbacks finish, instead of freeing callback-owned memory after a timeout.
+- Bound queued USB replies and fail the session on overflow instead of allowing unbounded memory growth.
+- Backport native libusb descriptor fixes for CVE-2026-23679 and CVE-2026-47104, with sanitizer regressions.
+- Check frame-buffer arithmetic and descriptor lengths before reading memory; preserve the distinction between unknown and empty capture damage.
+- Reject unsuccessful notarization and malformed update feeds; stage feed changes atomically. CI actions are pinned and checkout credentials are not retained.
+
 ## [0.3.6] - 2026-11-04
 
 ### Changed

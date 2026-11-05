@@ -724,18 +724,14 @@ pub fn encode_strip(
 /// columns. Using it here blanks the dock: it describes the strips in the order the driver's own
 /// full-surface path produces them, and the strips reaching this function do not arrive in that
 /// order. Reproducing it needs the producing side to match first.
-pub fn frame_records(dock: DockProfile, strips: &[Vec<u8>], head: u8) -> Result<Vec<Vec<u8>>> {
-    let owned: Vec<KVec<u8>> = strips
-        .iter()
-        .map(|s| {
-            let mut k = KVec::with_capacity(s.len(), GFP_KERNEL)?;
-            k.extend_from_slice(s, GFP_KERNEL)?;
-            Ok(k)
-        })
-        .collect::<Result<Vec<_>>>()?;
+pub fn frame_records<S: AsRef<[u8]>>(
+    dock: DockProfile,
+    strips: &[S],
+    head: u8,
+) -> Result<Vec<Vec<u8>>> {
     Ok(frames_out(video::haar::frame_records(
         dock.geometry(),
-        &owned,
+        strips,
         head,
     )?))
 }
@@ -1300,6 +1296,70 @@ mod production_builders {
 
     fn ridge() -> DockProfile {
         DockProfile::for_family(Family::Ridge).expect("Ridge is a family vino drives")
+    }
+
+    fn patterned_rgb(width: usize, height: usize) -> Vec<u8> {
+        (0..width * height * 3)
+            .map(|i| ((i * 37 + (i / (width * 3)) * 19) % 256) as u8)
+            .collect()
+    }
+
+    // The former scanout -> API bridge copied each cached body twice. Keep that
+    // owned representation here as a byte-equivalence reference, not in production.
+    fn copied_frame_records(
+        dock: DockProfile,
+        strips: &[Vec<u8>],
+        head: u8,
+    ) -> Result<Vec<Vec<u8>>> {
+        let copied = strips.to_vec();
+        let owned: Vec<KVec<u8>> = copied
+            .iter()
+            .map(|strip| {
+                let mut body = KVec::with_capacity(strip.len(), GFP_KERNEL)?;
+                body.extend_from_slice(strip, GFP_KERNEL)?;
+                Ok(body)
+            })
+            .collect::<Result<_>>()?;
+        Ok(frames_out(video::haar::frame_records(
+            dock.geometry(),
+            &owned,
+            head,
+        )?))
+    }
+
+    #[test]
+    fn borrowed_strip_records_match_owned_keyframes_and_damage() -> Result {
+        let (width, height) = (512, 128);
+        let rgb = patterned_rgb(width, height);
+        let damage = [(0, 0, 192, 32), (256, 64, 512, 128)];
+        for family in [Family::Ella, Family::Ridge, Family::Navarro] {
+            for deep in [false, true] {
+                let mut dock = DockProfile::for_family(family).unwrap();
+                if deep {
+                    dock = dock.ten_bit();
+                }
+                for clips in [None, Some(damage.as_slice())] {
+                    let strips: Vec<Vec<u8>> = strip_coords(dock, width, height, clips)?
+                        .into_iter()
+                        .map(|(x, y)| encode_strip(dock, width, &rgb, x, y))
+                        .collect::<Result<_>>()?;
+                    assert!(strips.len() > 1);
+                    let borrowed: Vec<&[u8]> = strips.iter().map(Vec::as_slice).collect();
+                    for head in [0, 1] {
+                        let actual = frame_records(dock, &borrowed, head)?;
+                        assert_eq!(actual, copied_frame_records(dock, &strips, head)?);
+                        assert_eq!(actual, frame_records(dock, &strips, head)?);
+                        if clips.is_none() {
+                            assert_eq!(
+                                actual,
+                                colour_frame_ep08_head(dock, width, height, &rgb, head)?
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Every part of the stream a connector opens with has to state the same depth.

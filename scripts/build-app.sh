@@ -17,10 +17,12 @@ cd "$(dirname "$0")/.."
 cargo=(cargo)
 if command -v rustup >/dev/null && rustup run stable cargo --version >/dev/null 2>&1; then
     cargo=(rustup run stable cargo)
+    # Cargo otherwise finds rustc on PATH, which may still be Homebrew's macOS-only build.
+    export RUSTC="${RUSTC:-$(rustup which --toolchain stable rustc)}"
 fi
-MACOSX_DEPLOYMENT_TARGET=14.0 "${cargo[@]}" build --release --manifest-path engine/Cargo.toml
-swift build -c release --product LinkLite
-bin_dir="$(swift build -c release --show-bin-path)"
+MACOSX_DEPLOYMENT_TARGET=14.0 "${cargo[@]}" build --locked --release --manifest-path engine/Cargo.toml
+swift build --force-resolved-versions -c release --product LinkLite
+bin_dir="$(swift build --force-resolved-versions -c release --show-bin-path)"
 
 app="dist/LinkLite.app"
 rm -rf "$app"
@@ -74,5 +76,5 @@ sign "$sparkle/Versions/B/Updater.app"
 sign "$sparkle"
 sign "$app"
 
-codesign --verify --strict --verbose=2 "$app"
+codesign --verify --deep --strict --verbose=2 "$app"
 echo "Built $app"

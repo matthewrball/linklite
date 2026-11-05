@@ -1565,15 +1565,64 @@ fn prefix_frame(
     let opener = kvino::frame_opener(dock, head, seq).unwrap_or_default();
     let trailer = kvino::frame_trailer(dock, head, seq);
     let payload_len = frames.iter().map(Vec::len).sum::<usize>();
-    let mut stream = Vec::with_capacity(
-        prefix.len() + opener.len() + report.len() + payload_len + trailer.len(),
-    );
-    stream.extend_from_slice(prefix);
-    stream.extend_from_slice(&opener);
-    stream.extend_from_slice(report);
-    for frame in frames {
-        stream.extend_from_slice(frame);
+    let total = prefix.len() + opener.len() + report.len() + payload_len + trailer.len();
+    let mut transfers = Vec::with_capacity(total.div_ceil(TRANSFER_SIZE));
+    let mut chunk = Vec::with_capacity(total.min(TRANSFER_SIZE));
+    for mut part in [prefix, opener.as_slice(), report]
+        .into_iter()
+        .chain(frames.iter().map(Vec::as_slice))
+        .chain(std::iter::once(trailer.as_slice()))
+    {
+        while !part.is_empty() {
+            let count = part.len().min(TRANSFER_SIZE - chunk.len());
+            chunk.extend_from_slice(&part[..count]);
+            part = &part[count..];
+            if chunk.len() == TRANSFER_SIZE {
+                transfers.push(chunk);
+                let remaining = total - transfers.len() * TRANSFER_SIZE;
+                chunk = Vec::with_capacity(remaining.min(TRANSFER_SIZE));
+            }
+        }
     }
-    stream.extend_from_slice(&trailer);
-    stream.chunks(TRANSFER_SIZE).map(<[u8]>::to_vec).collect()
+    if !chunk.is_empty() {
+        transfers.push(chunk);
+    }
+    transfers
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frame_transfer_chunks_match_contiguous_wire_stream() {
+        for family in [
+            kvino::Family::Ella,
+            kvino::Family::Ridge,
+            kvino::Family::Navarro,
+        ] {
+            let dock = DockProfile::for_family(family).unwrap();
+            for payload in [0, 1, 65_439, 65_440, 65_441, 65_536, 131_072] {
+                let frames = vec![vec![0x41; payload], Vec::new(), vec![0x42; 19]];
+                for prefix in [Vec::new(), vec![0x31; 65_537]] {
+                    let report = [0x32; 96];
+                    for seq in 0..3 {
+                        let mut expected = prefix.clone();
+                        expected.extend(kvino::frame_opener(dock, 1, seq).unwrap_or_default());
+                        expected.extend_from_slice(&report);
+                        for frame in &frames {
+                            expected.extend_from_slice(frame);
+                        }
+                        expected.extend(kvino::frame_trailer(dock, 1, seq));
+                        let expected: Vec<Vec<u8>> =
+                            expected.chunks(65_536).map(<[u8]>::to_vec).collect();
+                        assert_eq!(
+                            prefix_frame(dock, &prefix, &report, &frames, 1, seq),
+                            expected,
+                        );
+                    }
+                }
+            }
+        }
+    }
 }

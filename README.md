@@ -5,10 +5,10 @@
 <h1 align="center">LinkLite</h1>
 
 <p align="center">
-  <strong>The lightweight driver for DisplayLink docks on macOS</strong><br>
+  <strong>The lightweight DisplayLink alternative</strong><br>
   <br>
   Drive the monitors on your DisplayLink dock without DisplayLink Manager.<br>
-  One small menu-bar app. No background services, no login-window agent, no telemetry. Updates itself.
+  One small macOS menu-bar app. No login-window agent, no telemetry. Automatic updates.
 </p>
 
 <p align="center">
@@ -20,19 +20,23 @@
 </p>
 
 <p align="center">
-  <sub>Signed and notarized · Open source · Built on the <a href="https://lwn.net/Articles/1090989/">Vino</a> DisplayLink protocol research</sub>
+  <sub>Signed and notarized releases · Open source · Built on the <a href="https://lwn.net/Articles/1090989/">Vino</a> DisplayLink protocol research</sub>
 </p>
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-dark.png">
-    <img src="docs/assets/benchmark-light.png" alt="LinkLite versus DisplayLink Manager: 2.2x less GPU busy under 60 fps motion, zero GPU in LinkLite's own process, 3.8x less memory, 5.2x smaller app" width="760">
+    <img src="docs/assets/benchmark-light.png" alt="74% less memory than DisplayLink Manager in the two-4K-monitor benchmark: 134 MB versus 513 MB. Whole-system GPU busy under motion was 15% versus 33%; LinkLite uses more CPU. Measured November 3, 2026 with LinkLite 0.2.0 and DisplayLink Manager 16.1.25, before the latest optimizations." width="760">
   </picture>
+</p>
+
+<p align="center">
+  <sub>Measured with two 4K monitors on the same Mac. <a href="docs/BENCHMARK.md">Full benchmark, method, and CPU tradeoff →</a></sub>
 </p>
 
 ---
 
-**LinkLite** is a native macOS menu-bar app that talks to DisplayLink USB docks directly. For each monitor on the dock it creates a macOS display, sends only the parts of the screen that change, and lets the dock draw your mouse pointer. Tested daily on a Humanscale M/Connect 2 driving two 4K monitors at 60 Hz.
+**LinkLite** is a native macOS menu-bar app that talks to DisplayLink USB docks directly. For each monitor on the dock it creates a macOS display, sends only the parts of the screen that change, and lets the dock draw your mouse pointer. Tested on a Humanscale M/Connect 2 driving two 4K monitors at 60 Hz.
 
 ## Install
 
@@ -45,28 +49,41 @@ Requires macOS 14 Sonoma or later on Apple silicon, and a USB 3 (5 Gbps) link to
 
 ## Why LinkLite
 
-- **Light on your Mac.** 3.8x less memory than DisplayLink Manager, a 4 MB app instead of 21 MB, and about half the GPU load under heavy motion. LinkLite's own process never touches the GPU. ([Benchmark](docs/BENCHMARK.md))
-- **A clean picture.** Native 4K60 per monitor, sharp HiDPI "looks like" resolutions, and no stale boxes or flicker: changed areas are re-sent to every one of the dock's frame buffers once the screen settles.
+- **Light on your Mac.** A native Swift app and Rust display engine, without a bundled browser runtime. The [real-dock benchmark](docs/BENCHMARK.md) records the memory, GPU, and CPU tradeoffs.
+- **A clean picture.** Native 4K60 on the tested dock, sharp HiDPI "looks like" resolutions, and changed areas re-sent to every dock frame buffer once the screen settles.
 - **The dock draws the pointer.** Moving the mouse sends a few bytes of position data instead of re-encoding the screen around it.
-- **Nothing extra running.** One process. No kernel extension, no login-window agent, no helper services. Quit it and it is gone.
-- **Recovers on its own.** Monitors switched on after LinkLite starts are picked up, and if the dock resets or its cable is replugged, your screens come back by themselves.
-- **Stays up to date.** New releases download in the background and install when you say so. Turn it off from the menu-bar icon.
-- **Private by construction.** No analytics, no account. The only network traffic is the update check against this repository. See [PRIVACY.md](PRIVACY.md).
+- **Nothing extra running.** No kernel extension, no login-window agent, no always-running driver helper.
+- **Recovers on its own.** Monitors switched on after LinkLite starts are picked up, and displays recover after a dock reset or cable reconnection.
+- **Stays up to date.** New releases download in the background; LinkLite asks before restarting to install them.
+- **Private by construction.** No analytics or account. Network traffic is limited to update checks and downloads from GitHub. See [PRIVACY.md](PRIVACY.md).
 
-## The numbers, including where DisplayLink Manager wins
+## Latest optimizations
 
-Two 4K monitors, same Mac (Apple M5 Pro, macOS 26.6), same workload, measured back to back with DisplayLink Manager 16.1.25:
+**In development—not in the latest release yet.** The next release cuts avoidable work without changing the display pipeline or encoded output:
+
+- The closed menu no longer keeps its status animation running.
+- Capture, cursor, and strip-candidate buffers are reused; frame packing avoids duplicate copies.
+- USB replies are bounded, with hardened descriptor parsing and transfer teardown.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/optimizations-dark.png">
+    <img src="docs/assets/optimizations-light.png" alt="Unreleased hardware-free checks: hidden searching-panel CPU decreased from 9.54% to 0.18%; packing 50 cached 4K frames took 119.2 ms instead of 204.1 ms. That synthetic full-frame case avoids about 40 MiB of duplicate copying and 16,200 temporary strip-body allocations, not retained RAM." width="760">
+  </picture>
+</p>
+
+These are component checks, not new whole-app memory, display-frame-rate, or live-dock results. [Measurements and method](docs/BENCHMARK.md#hardware-free-optimization-checks--2026-11-04) · [Security boundaries](SECURITY.md#trust-boundaries)
+
+## The real-dock benchmark
+
+**Historical baseline, measured November 3, 2026—not a rerun after the new optimizations.** LinkLite 0.2.0 pre-release versus DisplayLink Manager 16.1.25: two 4K monitors, the same Apple M5 Pro Mac on macOS 26.6, and the same workload.
 
 | | LinkLite | DisplayLink Manager |
 |---|---|---|
-| Whole GPU busy, 60 fps motion | **15%** | 33% |
-| GPU time in the driver's own process | **0 ms/s** | 9–168 ms/s |
-| Memory | **134 MB** | 513 MB |
-| App size | **3.9 MB** | 20.6 MB |
 | CPU, live desktop | 55% | **2%** |
 | CPU, 60 fps motion | 338% | **20%** |
 
-DisplayLink Manager compresses video on the GPU; LinkLite compresses it on the CPU, so it uses more CPU when large parts of the screen move. A GPU encoder is the next big item on the roadmap. Method, per-run numbers, and raw data: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+The tradeoff: DisplayLink Manager compresses video on the GPU; LinkLite compresses it on the CPU. In this benchmark LinkLite used less memory and less whole-system GPU under motion, but more CPU. These results have not been extrapolated to the unreleased build. Method, per-run numbers, and raw data: [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 ## Compatibility
 
@@ -105,7 +122,7 @@ No. LinkLite is an independent open-source project and is not affiliated with or
 
 ## Privacy and security
 
-No telemetry, no identifiers; the only network traffic is the update check. Details in [PRIVACY.md](PRIVACY.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+No analytics or telemetry. Update checks and downloads go to GitHub; your display pixels go to the USB dock, not a backend. Use a dock you trust to receive those pixels. Details in [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md). Report vulnerabilities privately as described in the security policy.
 
 ## Credits
 
@@ -114,7 +131,3 @@ The DisplayLink protocol, HDCP session, and video codec come from [Vino](https:/
 ## License
 
 [GPL-2.0-or-later](LICENSE) © 2026 Matthew Ball.
-
----
-
-<p align="center"><sub>Your monitors, without the weight.</sub></p>

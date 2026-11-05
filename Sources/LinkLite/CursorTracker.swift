@@ -20,11 +20,13 @@ final class CursorTracker {
 
     /// Largest image the dock cursor takes.
     private static let maxSide = 64
+    private static let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
 
     private let engine: EngineHandle
     private var targets: [Target] = []
     private var monitors: [Any] = []
     private var lastImage: [UInt8] = []
+    private var renderedImage: [UInt8] = []
     private var lastHotspot = (x: Int32(0), y: Int32(0))
     private var lastScale: CGFloat = 0
     private var lastShapeCheck = Date.distantPast
@@ -96,10 +98,13 @@ final class CursorTracker {
         let fit = min(scale, CGFloat(side) / max(size.width, 1), CGFloat(side) / max(size.height, 1))
         let pixelWidth = max(1, min(side, Int((size.width * fit).rounded(.up))))
         let pixelHeight = max(1, min(side, Int((size.height * fit).rounded(.up))))
-        var pixels = [UInt8](repeating: 0, count: side * side * 4)
-        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+        if renderedImage.isEmpty {
+            renderedImage = [UInt8](repeating: 0, count: side * side * 4)
+        }
+        let drawn = renderedImage.withUnsafeMutableBytes { buffer -> Bool in
+            buffer.initializeMemory(as: UInt8.self, repeating: 0)
             guard let context = CGContext(data: buffer.baseAddress, width: side, height: side, bitsPerComponent: 8,
-                                          bytesPerRow: side * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                          bytesPerRow: side * 4, space: Self.colorSpace,
                                           bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
                                               | CGBitmapInfo.byteOrder32Little.rawValue)
             else { return false }
@@ -115,10 +120,11 @@ final class CursorTracker {
         }
         guard drawn else { return }
         let hotspot = (x: Int32((cursor.hotSpot.x * fit).rounded()), y: Int32((cursor.hotSpot.y * fit).rounded()))
-        guard pixels != lastImage || hotspot != lastHotspot || scale != lastScale else { return }
-        lastImage = pixels
+        guard renderedImage != lastImage || hotspot != lastHotspot || scale != lastScale else { return }
+        // Keep both allocations: the next shape check renders into the previous image's buffer.
+        swap(&renderedImage, &lastImage)
         lastHotspot = hotspot
         lastScale = scale
-        engine.setCursor(bgra: pixels, width: UInt32(side), height: UInt32(side), hotX: hotspot.x, hotY: hotspot.y)
+        engine.setCursor(bgra: lastImage, width: UInt32(side), height: UInt32(side), hotX: hotspot.x, hotY: hotspot.y)
     }
 }

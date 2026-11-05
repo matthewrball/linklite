@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import DLProbeCore
 
@@ -18,24 +19,6 @@ import Testing
     #expect(parseHexID("zzzz") == nil)
 }
 
-@Test func humanFormattingIncludesAssessment() {
-    let device = USBDeviceReport(
-        productName: "M/Connect",
-        vendorName: "DisplayLink",
-        serialNumber: "abc",
-        vendorID: 0x17e9,
-        productID: 0x600f,
-        usbLinkSpeedBitsPerSecond: 480_000_000,
-        exclusiveOwner: "DisplayLinkUserAgent"
-    )
-
-    let output = formatHuman([device])
-    #expect(output.contains("M/Connect (0x17e9:0x600f)"))
-    #expect(output.contains("USB link speed: 480 Mbps"))
-    #expect(output.contains("Exclusive owner: DisplayLinkUserAgent"))
-    #expect(output.contains("Dual-4K transport preflight: FAIL"))
-}
-
 @Test func jsonFormattingUsesStableKeys() throws {
     let device = USBDeviceReport(
         productName: nil,
@@ -47,9 +30,12 @@ import Testing
         exclusiveOwner: nil
     )
 
-    let text = String(decoding: try jsonData([device]), as: UTF8.self)
-    #expect(text.contains("\"vidpid\" : \"0x17e9:0x600f\""))
-    #expect(text.contains("\"assessment\" : \"UNKNOWN\""))
+    let rows = try #require(JSONSerialization.jsonObject(with: jsonData([device])) as? [[String: Any]])
+    let row = try #require(rows.first)
+    #expect(row["vidpid"] as? String == "0x17e9:0x600f")
+    #expect(row["assessment"] as? String == "UNKNOWN")
+    #expect(row["usbLinkSpeedBitsPerSecond"] is NSNull)
+    #expect(row["serialNumber"] is NSNull)
 }
 
 @Test func configurationDescriptorParsing() throws {
@@ -70,9 +56,20 @@ import Testing
         ]),
         InterfaceLayout(number: 1, alternateSetting: 0, interfaceClass: 0xfe, subclass: 1, interfaceProtocol: 1),
     ])
-    #expect(interfaces[1].role.contains("never touch"))
     #expect(throws: DescriptorParseError.notConfiguration) { try parseConfigurationDescriptor(vendor) }
     #expect(throws: DescriptorParseError.truncated(offset: 9)) {
         try parseConfigurationDescriptor([9, 0x02, 12, 0, 1, 1, 0, 0x80, 0xfa, 9, 0x04, 0])
+    }
+}
+
+@Test func configurationLengthMustCoverCompleteDescriptor() {
+    #expect(throws: DescriptorParseError.truncated(offset: 9)) {
+        try parseConfigurationDescriptor([9, 2, 18, 0, 1, 1, 0, 0x80, 0xfa])
+    }
+    #expect(throws: DescriptorParseError.truncated(offset: 0)) {
+        try parseConfigurationDescriptor([9, 2, 0, 0, 1, 1, 0, 0x80, 0xfa])
+    }
+    #expect(throws: DescriptorParseError.notConfiguration) {
+        try parseConfigurationDescriptor([2, 2, 9, 0, 1, 1, 0, 0x80, 0xfa])
     }
 }

@@ -38,6 +38,9 @@ const RECV_QUEUE_DEPTH: usize = 4;
 /// Buffer size for each queued EP 0x84 read. Dock control/HDCP responses are
 /// well under 1 KiB; 8 KiB is generous and avoids per-call size juggling.
 const RECV_BUF_LEN: usize = 8192;
+/// Bound retained replies while an OUT transfer pumps events without consuming IN replies.
+/// Overflow terminates the receive stream rather than dropping a push and continuing out of sync.
+const MAX_READY_REPLIES: usize = 256;
 /// EP 0x83 status interrupt (on interface 2) that DLM polls.
 const EP_INTR: u8 = 0x83;
 
@@ -158,6 +161,29 @@ struct InShared {
     inflight: AtomicI32,
     /// Set during teardown so the callback stops re-arming.
     closing: AtomicBool,
+    overflowed: AtomicBool,
+}
+
+impl InShared {
+    fn enqueue(&self, bytes: &[u8]) -> bool {
+        let mut ready = self.ready.lock().unwrap_or_else(|error| error.into_inner());
+        if self.overflowed.load(Ordering::Acquire) {
+            return false;
+        }
+        if ready.len() == MAX_READY_REPLIES {
+            self.overflowed.store(true, Ordering::Release);
+            ready.clear();
+            return false;
+        }
+        ready.push_back(bytes.to_vec());
+        true
+    }
+
+    fn wait_until_idle(&self, mut pump: impl FnMut()) {
+        while self.inflight.load(Ordering::Acquire) > 0 {
+            pump();
+        }
+    }
 }
 
 /// libusb completion callback for an EP 0x84 IN transfer. Runs on whichever
@@ -168,11 +194,14 @@ extern "system" fn ep84_complete(transfer: *mut libusb_transfer) {
     unsafe {
         let t = &*transfer;
         let shared = &*(t.user_data as *const InShared);
-        if t.status == LIBUSB_TRANSFER_COMPLETED && !shared.closing.load(Ordering::Acquire) {
+        if t.status == LIBUSB_TRANSFER_COMPLETED
+            && !shared.closing.load(Ordering::Acquire)
+            && !shared.overflowed.load(Ordering::Acquire)
+        {
             let n = t.actual_length as usize;
-            if n > 0 {
-                let data = std::slice::from_raw_parts(t.buffer, n).to_vec();
-                shared.ready.lock().unwrap().push_back(data);
+            if n > 0 && !shared.enqueue(std::slice::from_raw_parts(t.buffer, n)) {
+                shared.inflight.fetch_sub(1, Ordering::AcqRel);
+                return;
             }
             // Re-arm to keep the queue perpetually posted (DLM model).
             if libusb_submit_transfer(transfer) != 0 {
@@ -203,6 +232,7 @@ impl AsyncIn {
             ready: Mutex::new(VecDeque::new()),
             inflight: AtomicI32::new(0),
             closing: AtomicBool::new(false),
+            overflowed: AtomicBool::new(false),
         });
         let shared_ptr = &*shared as *const InShared as *mut c_void;
         let mut buffers: Vec<Box<[u8]>> = Vec::with_capacity(RECV_QUEUE_DEPTH);
@@ -249,6 +279,9 @@ impl AsyncIn {
     fn recv(&self, timeout: Duration) -> Result<Vec<u8>, Error> {
         let deadline = Instant::now() + timeout;
         loop {
+            if self.shared.overflowed.load(Ordering::Acquire) {
+                return Err(Error::Usb(rusb::Error::Overflow));
+            }
             if let Some(b) = self.shared.ready.lock().unwrap().pop_front() {
                 return Ok(b);
             }
@@ -274,11 +307,11 @@ impl Drop for AsyncIn {
             // (returns NOT_FOUND if not in flight); ignore the result.
             unsafe { libusb_cancel_transfer(t) };
         }
-        // Drain callbacks so no transfer is still owned by libusb before we free.
-        let deadline = Instant::now() + Duration::from_millis(500);
-        while self.shared.inflight.load(Ordering::Acquire) > 0 && Instant::now() < deadline {
-            pump_events(self.ctx, Duration::from_millis(20));
-        }
+        // As on the OUT paths, cancellation is not completion. Keep the transfers,
+        // buffers and callback state alive until libusb returns every transfer.
+        // A deadline here would free memory still reachable by a late callback.
+        self.shared
+            .wait_until_idle(|| pump_events(self.ctx, Duration::from_millis(20)));
         for &t in &self.transfers {
             // SAFETY: transfer is idle (callback fired) — safe to free.
             unsafe { libusb_free_transfer(t) };
@@ -949,4 +982,97 @@ fn has_endpoint(handle: &DeviceHandle<Context>, addr: u8) -> bool {
         .flat_map(|i| i.descriptors())
         .flat_map(|d| d.endpoint_descriptors())
         .any(|e| e.address() == addr)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shared(inflight: i32) -> InShared {
+        InShared {
+            ready: Mutex::new(VecDeque::new()),
+            inflight: AtomicI32::new(inflight),
+            closing: AtomicBool::new(false),
+            overflowed: AtomicBool::new(false),
+        }
+    }
+
+    #[test]
+    fn reply_queue_preserves_order_and_fails_closed_on_overflow() {
+        let state = shared(0);
+        for n in 0..MAX_READY_REPLIES {
+            assert!(state.enqueue(&[n as u8]));
+        }
+        {
+            let ready = state.ready.lock().unwrap();
+            assert_eq!(ready.len(), MAX_READY_REPLIES);
+            for (n, bytes) in ready.iter().enumerate() {
+                assert_eq!(bytes, &[n as u8]);
+            }
+        }
+        assert!(!state.enqueue(&[0xff]));
+        assert!(state.overflowed.load(Ordering::Acquire));
+        assert!(state.ready.lock().unwrap().is_empty());
+        assert!(!state.enqueue(&[0]));
+        let receiver = AsyncIn {
+            ctx: std::ptr::null_mut(),
+            transfers: Vec::new(),
+            _buffers: Vec::new(),
+            shared: Box::new(state),
+        };
+        assert!(matches!(
+            receiver.recv(Duration::ZERO),
+            Err(Error::Usb(rusb::Error::Overflow))
+        ));
+    }
+
+    #[test]
+    fn callbacks_after_overflow_return_every_inflight_transfer() {
+        let state = Box::new(shared(RECV_QUEUE_DEPTH as i32));
+        state.overflowed.store(true, Ordering::Release);
+        for remaining in (0..RECV_QUEUE_DEPTH).rev() {
+            let transfer = unsafe { libusb_alloc_transfer(0) };
+            assert!(!transfer.is_null());
+            unsafe {
+                (*transfer).user_data = (&*state as *const InShared).cast_mut().cast();
+                (*transfer).status = LIBUSB_TRANSFER_COMPLETED;
+            }
+            // Overflow must bypass re-submission, even for a successful completion.
+            ep84_complete(transfer);
+            assert_eq!(state.inflight.load(Ordering::Acquire), remaining as i32);
+            unsafe { libusb_free_transfer(transfer) };
+        }
+        state.wait_until_idle(|| panic!("idle transfers must not need an event pump"));
+    }
+
+    #[test]
+    fn cancelled_in_transfer_stays_owned_until_delayed_callback() {
+        let state = Box::new(shared(1));
+        state.closing.store(true, Ordering::Release);
+        let mut buffer = vec![0xa5u8; RECV_BUF_LEN].into_boxed_slice();
+        // No USB context or device: exercise the real cancellation callback on an
+        // allocated, never-submitted transfer. Closing prevents any re-submission.
+        let transfer = unsafe { libusb_alloc_transfer(0) };
+        assert!(!transfer.is_null());
+        unsafe {
+            (*transfer).user_data = (&*state as *const InShared).cast_mut().cast();
+            (*transfer).buffer = buffer.as_mut_ptr();
+            (*transfer).length = buffer.len() as c_int;
+            (*transfer).status = rusb::constants::LIBUSB_TRANSFER_CANCELLED;
+        }
+        let started = Instant::now();
+        let delay = Duration::from_millis(550);
+        state.wait_until_idle(|| {
+            assert_eq!(buffer[0], 0xa5);
+            assert_eq!(state.inflight.load(Ordering::Acquire), 1);
+            if started.elapsed() >= delay {
+                ep84_complete(transfer);
+            } else {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        });
+        assert!(started.elapsed() >= delay);
+        assert_eq!(state.inflight.load(Ordering::Acquire), 0);
+        unsafe { libusb_free_transfer(transfer) };
+    }
 }

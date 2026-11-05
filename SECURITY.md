@@ -10,7 +10,7 @@ Please include enough detail to reproduce: LinkLite version, macOS version, Mac 
 
 ## Scope
 
-LinkLite is a local menu-bar app. It talks to the USB dock it drives and, for updates only, to GitHub: it downloads its update feed and new releases, and installs an update only if its EdDSA signature matches the key built into the app. It has no backend and collects no data. See [PRIVACY.md](PRIVACY.md).
+LinkLite is a local menu-bar app. It talks to the USB dock it drives and, for updates only, to GitHub. Sparkle authenticates downloaded updates before extraction. Official releases carry EdDSA and Apple Developer ID signatures; Sparkle also supports same-Developer-ID validation when rotating an update-signing key. It has no backend or telemetry. See [PRIVACY.md](PRIVACY.md).
 
 Areas of particular interest:
 
@@ -20,6 +20,12 @@ Areas of particular interest:
 - **Release integrity.** Release archives on GitHub are signed with the maintainer's Developer ID, notarized by Apple, and published with a SHA-256 checksum. Report anything that lets a modified build pass as an official one.
 
 Out of scope: the dock's own firmware, and the DisplayLink protocol design itself. Issues in upstream Vino that are not specific to LinkLite are best reported to [Vino](https://github.com/cameron1729/Vino) as well.
+
+## Trust boundaries
+
+Connect only docks you trust to receive the pixels displayed on their monitors. The current HDCP handshake checks possession of the receiver's supplied key, but does not validate a receiver certificate against a trusted root. It is not a guarantee of the dock's manufacturer or identity. USB replies and monitor descriptors must still be treated as untrusted input.
+
+LinkLite runs without App Sandbox. Release builds enable hardened runtime without JIT or library-validation exceptions. Memory-safety defects therefore matter even when they require a physically attached device. The native libusb dependency includes documented descriptor-parser backports in [`vendor/libusb1-sys/README.md`](vendor/libusb1-sys/README.md); auditing Cargo package versions alone does not cover that C code.
 
 ## Supported versions
 

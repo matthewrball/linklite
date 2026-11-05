@@ -16,7 +16,6 @@ struct MonitorInfo: Sendable, Equatable {
     var productCode: UInt16
     var serial: UInt32
     var name: String
-    var edid: Data
     /// The dock draws the pointer; capture must leave it out (see CursorTracker).
     var hardwareCursor: Bool
 
@@ -32,11 +31,6 @@ struct MonitorInfo: Sendable, Equatable {
         serial = monitor.serial
         let reported = monitor.name.map { String(cString: $0) } ?? ""
         name = reported.isEmpty ? "DisplayLink Monitor \(Int(monitor.head) + 1)" : reported
-        if let edid = monitor.edid, monitor.edid_len > 0 {
-            self.edid = Data(bytes: edid, count: monitor.edid_len)
-        } else {
-            self.edid = Data()
-        }
         hardwareCursor = monitor.hardware_cursor
     }
 
@@ -144,8 +138,17 @@ final class EngineHandle: @unchecked Sendable {
         defer { pthread_rwlock_unlock(lock) }
         guard let engine else { return }
         if let dirty {
-            dirty.withUnsafeBufferPointer {
-                dll_engine_submit_frame(engine, head, bgra, stride, width, height, $0.baseAddress, dirty.count / 4)
+            if dirty.isEmpty {
+                // NULL means unknown damage, not an empty report. Keep a non-NULL sentinel
+                // even when Swift chooses a NULL base address for an empty array.
+                var empty: UInt32 = 0
+                withUnsafePointer(to: &empty) {
+                    dll_engine_submit_frame(engine, head, bgra, stride, width, height, $0, 0)
+                }
+            } else {
+                dirty.withUnsafeBufferPointer {
+                    dll_engine_submit_frame(engine, head, bgra, stride, width, height, $0.baseAddress, dirty.count / 4)
+                }
             }
         } else {
             dll_engine_submit_frame(engine, head, bgra, stride, width, height, nil, 0)

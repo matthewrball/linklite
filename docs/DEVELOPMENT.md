@@ -88,6 +88,15 @@ Status 2026-11-03: criteria 1 and 2 met on the monitors. Not yet measured: the e
 
 Protected-content playback is out of scope for the first implementation.
 
+## Engineering hardening — 2026-11-04 (unreleased)
+
+The C ABI and wire encoding are unchanged. Capture damage is converted lazily at the ABI boundary, frame spans are checked before constructing Rust slices, and cursor/damage/candidate storage is reused. Cached encoded strips are borrowed during packing, and USB chunks are filled without an intermediate full-frame stream. Byte-equivalence regressions cover the affected encoding paths. See [BENCHMARK.md](BENCHMARK.md#hardware-free-optimization-checks--2026-11-04) for the limited measurements and their method.
+
+The native dependency is pinned in `vendor/libusb1-sys/` with documented upstream descriptor-parser backports. The USB receive queue now has a hard capacity and fails closed on overflow. Teardown waits for all submitted transfer callbacks before releasing memory; if libusb never completes cancellation, shutdown can wait indefinitely. Do not replace that wait with a timeout that frees live callback state.
+
+Hardware-free regressions and signed application builds pass. Two-monitor rendering, physical unplug/replug, sleep/wake, the receive-queue high-water mark, and an eight-hour memory run still need live-hardware validation for these changes. These checks do not supersede the acceptance criteria above.
+
+
 ## Safety boundaries
 
 - Never terminate `WindowServer` or `kernel_task`.

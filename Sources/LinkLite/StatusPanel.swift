@@ -6,19 +6,26 @@ import SwiftUI
 /// The borderless glass panel that drops down from the menu-bar icon. It takes keyboard focus
 /// without activating the app (so Esc and ⌘Q work) and closes on a click anywhere else.
 @MainActor
-final class StatusPanelController {
+final class StatusPanelController: NSObject, NSWindowDelegate {
+    private let model: PanelModel
     private let panel: Panel
-    private let hosting: NSHostingController<PanelView>
+    private let hosting: NSHostingController<PanelView?>
     private weak var anchor: NSStatusBarButton?
     private var monitors: [Any] = []
     var onShow: (() -> Void)?
 
-    var isShown: Bool { panel.isVisible }
+    private(set) var isShown = false
+    private var presentationID: UInt64 = 0
 
     init(model: PanelModel) {
-        hosting = NSHostingController(rootView: PanelView(model: model))
+        self.model = model
+        // A hidden SwiftUI view can keep repeat-forever animations running. Build the view tree
+        // only while presented, and release it after the closing fade finishes.
+        hosting = NSHostingController(rootView: nil)
         hosting.sizingOptions = [.preferredContentSize]
         panel = Panel(contentViewController: hosting)
+        super.init()
+        panel.delegate = self
         panel.styleMask = [.borderless, .nonactivatingPanel]
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -30,11 +37,11 @@ final class StatusPanelController {
         hosting.view.wantsLayer = true
         hosting.view.layer?.backgroundColor = .clear
 
-        // The content grows and shrinks (monitors come and go): keep the top edge pinned under the icon.
-        NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: panel,
-                                               queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.place() }
-        }
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        // Monitor attachment changes the content's size; keep its top edge under the icon.
+        place()
     }
 
     func toggle(from button: NSStatusBarButton) {
@@ -42,8 +49,12 @@ final class StatusPanelController {
     }
 
     func show(from button: NSStatusBarButton) {
+        guard !isShown else { return }
+        isShown = true
+        presentationID &+= 1
         anchor = button
         onShow?()
+        hosting.rootView = PanelView(model: model)
         panel.setContentSize(hosting.view.fittingSize)
         place()
         panel.alphaValue = 0
@@ -67,14 +78,21 @@ final class StatusPanelController {
 
     func hide() {
         guard isShown else { return }
+        isShown = false
+        presentationID &+= 1
+        let closingPresentation = presentationID
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
         anchor?.highlight(false)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
             panel.animator().alphaValue = 0
-        } completionHandler: { [panel] in
-            MainActor.assumeIsolated { panel.orderOut(nil) }
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.presentationID == closingPresentation else { return }
+                self.panel.orderOut(nil)
+                self.hosting.rootView = nil
+            }
         }
     }
 

@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-04",
+  "status": "Unreleased",
+  "scope": "Hardware-free component checks, not a live-dock benchmark",
+  "hidden_panel": {
+    "before_cpu_pct": 9.54,
+    "after_cpu_pct": 0.18,
+    "sample_seconds": 6,
+    "state": "Searching panel, dismissed; production views in a native host"
+  },
+  "cached_frame_packing": {
+    "before_ms": 204.1,
+    "after_ms": 119.2,
+    "iterations": 50,
+    "width": 3840,
+    "height": 2160,
+    "build": "Optimized Rust build",
+    "input": "Same patterned RGB frame and cached Ridge strips"
+  },
+  "avoided_work": {
+    "copied_bytes_per_frame": 41988360,
+    "strip_body_allocations_per_frame": 16200,
+    "scope": "Structural count for that synthetic full-frame case, not retained memory"
+  }
+}
