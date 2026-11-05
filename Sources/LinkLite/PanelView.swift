@@ -38,8 +38,17 @@ final class PanelModel: ObservableObject {
 /// The brand mint, from the icon.
 private let mint = Color(red: 0.18, green: 0.65, blue: 0.48)
 
+/// Shared by SwiftUI and the native panel so disclosure and window resizing stay in step.
+@MainActor
+enum DisclosureMotion {
+    static let duration = 0.14
+    static let animation = Animation.timingCurve(0.22, 0.61, 0.36, 1, duration: duration)
+    static let timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 0.61, 0.36, 1)
+}
+
 struct PanelView: View {
     @ObservedObject var model: PanelModel
+    let onSizeChange: (CGSize) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -82,13 +91,18 @@ struct PanelView: View {
         // margin keeps it from being clipped. StatusPanelController offsets the window by the margin.
         .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
         .padding(Self.shadowMargin)
+        .fixedSize()
+        // The window animates to the content's preferred size using the same disclosure curve.
+        // Keep the content top-aligned while the native frame catches up.
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { onSizeChange($0) }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     static let shadowMargin: CGFloat = 28
 
     /// Abendrot's disclosure timing: motion.dur-base and ease-warm.
     private var disclosureAnimation: Animation? {
-        reduceMotion ? nil : .timingCurve(0.22, 0.61, 0.36, 1, duration: 0.14)
+        reduceMotion ? nil : DisclosureMotion.animation
     }
 
     private var header: some View {
