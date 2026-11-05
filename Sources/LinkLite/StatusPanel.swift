@@ -6,7 +6,7 @@ import SwiftUI
 /// The borderless glass panel that drops down from the menu-bar icon. It takes keyboard focus
 /// without activating the app (so Esc and ⌘Q work) and closes on a click anywhere else.
 @MainActor
-final class StatusPanelController: NSObject, NSWindowDelegate {
+final class StatusPanelController {
     private let model: PanelModel
     private let panel: Panel
     private let hosting: NSHostingController<PanelView?>
@@ -22,10 +22,10 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         // A hidden SwiftUI view can keep repeat-forever animations running. Build the view tree
         // only while presented, and release it after the closing fade finishes.
         hosting = NSHostingController(rootView: nil)
-        hosting.sizingOptions = [.preferredContentSize]
+        // Resize explicitly with the disclosure curve instead of letting preferred-size changes
+        // snap the window to its final height and recenter the content during the transition.
+        hosting.sizingOptions = []
         panel = Panel(contentViewController: hosting)
-        super.init()
-        panel.delegate = self
         panel.styleMask = [.borderless, .nonactivatingPanel]
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -36,12 +36,6 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         hosting.view.wantsLayer = true
         hosting.view.layer?.backgroundColor = .clear
-
-    }
-
-    func windowDidResize(_ notification: Notification) {
-        // Monitor attachment changes the content's size; keep its top edge under the icon.
-        place()
     }
 
     func toggle(from button: NSStatusBarButton) {
@@ -54,9 +48,10 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         presentationID &+= 1
         anchor = button
         onShow?()
-        hosting.rootView = PanelView(model: model)
-        panel.setContentSize(hosting.view.fittingSize)
-        place()
+        hosting.rootView = PanelView(model: model) { [weak self] size in
+            self?.place(size: size)
+        }
+        place(size: hosting.sizeThatFits(in: .zero))
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
         NSAnimationContext.runAnimationGroup { context in
@@ -98,15 +93,25 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
 
     /// The glass centred under the icon, 6 pt below the menu bar, kept inside the screen. The window
     /// extends past the glass by the shadow margin on every side.
-    private func place() {
-        guard let button = anchor, let window = button.window else { return }
+    private func place(size: NSSize) {
+        guard isShown, let button = anchor, let window = button.window else { return }
         let icon = window.convertToScreen(button.convert(button.bounds, to: nil))
-        let size = panel.frame.size
         let margin = PanelView.shadowMargin
         let visible = (window.screen ?? NSScreen.main)?.visibleFrame ?? .zero
         var x = icon.midX - size.width / 2
         x = min(max(x, visible.minX + 8 - margin), visible.maxX - size.width - 8 + margin)
-        panel.setFrameOrigin(NSPoint(x: x.rounded(), y: (icon.minY - 6 + margin - size.height).rounded()))
+        let top = (icon.minY - 6 + margin).rounded()
+        let frame = NSRect(x: x.rounded(), y: top - size.height, width: size.width, height: size.height)
+        guard panel.frame != frame else { return }
+        if panel.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = DisclosureMotion.duration
+                context.timingFunction = DisclosureMotion.timingFunction
+                panel.animator().setFrame(frame, display: false)
+            }
+        } else {
+            panel.setFrame(frame, display: false)
+        }
     }
 
     private final class Panel: NSPanel {

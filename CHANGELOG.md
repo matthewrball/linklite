@@ -4,12 +4,15 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-11-05
+
 ### Changed
 
 - Require an explicit public or candidate release channel, Developer ID signing, accepted notarization, and a Sparkle signing key that matches the built app. Candidate packages and feeds are isolated from public artifacts.
 - Reject public packages that reuse a published build number, short version, or DMG URL, so a build-only version bump cannot replace already released bytes.
 - Exercise release failure handling and app-bundle/license packaging in CI, with a stable required-check name and a Node 24 checkout action.
 - Add release/recovery procedures and measurable pre-1.0 hardware, upgrade, compatibility, and performance gates. Separate the historically tested dock from unqualified device families and OS versions.
+- Smooth the settings disclosure with matching chevron and native-window easing. Keep the panel's top edge anchored while expanding or collapsing, including rapid reversals, and honor Reduce Motion.
 
 ## [0.3.7] - 2026-11-04
 
@@ -106,7 +109,8 @@ First tester build, released as **DisplayLink Lite**.
 - A still screen stays clean, with no stale boxes or flickering patches: changed areas get a follow-up pass once the screen settles, and frames cycle through all three of the dock's buffers.
 - Heavy motion (for example App Exposé on two 4K monitors) does not reset the dock: video across both monitors is held to 100 MB/s.
 
-[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.7...HEAD
+[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.8...HEAD
+[0.3.8]: https://github.com/matthewrball/linklite/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/matthewrball/linklite/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/matthewrball/linklite/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/matthewrball/linklite/compare/v0.3.4...v0.3.5
