@@ -107,15 +107,6 @@ macOS has no public way for an app to provide a display: Apple offers no display
 
 No. LinkLite is an independent open-source project and is not affiliated with or endorsed by Synaptics or DisplayLink. DisplayLink is a trademark of Synaptics Incorporated, used here only to describe compatibility.
 
-## Build from source
-
-```sh
-scripts/build-app.sh          # Rust engine + Swift app, signed if you have a Developer ID
-open dist/LinkLite.app
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the toolchain, tests, and diagnostics, and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the engineering notes.
-
 ## Privacy and security
 
 No telemetry, no identifiers; the only network traffic is the update check. Details in [PRIVACY.md](PRIVACY.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
