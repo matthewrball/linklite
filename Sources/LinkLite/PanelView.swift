@@ -130,8 +130,8 @@ private struct StatusCard: View {
                 // Breathes with the light: smaller and dimmer as it shrinks, full as it swells.
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
-                    .scaleEffect(1 - 0.04 * (1 - breath), anchor: .leading)
-                    .opacity(0.6 + 0.4 * breath)
+                    .scaleEffect(1 - 0.01 * (1 - breath), anchor: .leading)
+                    .opacity(0.92 + 0.08 * breath)
                 if let subtitle {
                     Text(subtitle)
                         .font(.system(size: 11.5))
@@ -156,7 +156,7 @@ private struct StatusCard: View {
     private func animate() {
         breathe = false
         guard pulsing, !reduceMotion else { return }
-        withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { breathe = true }
+        withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) { breathe = true }
     }
 
     private var title: String {
@@ -214,13 +214,13 @@ private struct StatusOrb: View {
             Circle()
                 .fill(color.opacity(0.2))
                 .frame(width: 30, height: 30)
-                .scaleEffect(0.75 + 0.25 * breath)
-                .opacity(0.35 + 0.65 * breath)
+                .scaleEffect(0.88 + 0.12 * breath)
+                .opacity(0.65 + 0.35 * breath)
             Circle()
                 .fill(color.gradient)
                 .frame(width: 11, height: 11)
-                .scaleEffect(0.85 + 0.15 * breath)
-                .shadow(color: color.opacity(0.35 + 0.35 * breath), radius: 5)
+                .scaleEffect(0.94 + 0.06 * breath)
+                .shadow(color: color.opacity(0.45 + 0.25 * breath), radius: 5)
         }
         .frame(width: 32, height: 32)
     }
