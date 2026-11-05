@@ -9,6 +9,17 @@
     <language>en</language>
     <!-- release.sh inserts new <item> elements directly below this line. -->
     <item>
+      <title>LinkLite 0.3.7</title>
+      <link>https://github.com/matthewrball/linklite/releases/tag/v0.3.7</link>
+      <pubDate>Thu, 05 Nov 2026 07:10:18 +0000</pubDate>
+      <sparkle:version>0.3.7</sparkle:version>
+      <sparkle:shortVersionString>0.3.7</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/matthewrball/linklite/releases/download/v0.3.7/LinkLite-0.3.7.dmg"
+                 type="application/octet-stream"
+                 sparkle:edSignature="QSXFW48N6/JJ6jdTTR5xjgQli0I3ETiQj1FQKxpD589W9yNl2loGMI9gZncWOYFA1GurgNg1nrdU2zUm4t/pDg==" length="4249780" />
+    </item>
+    <item>
       <title>LinkLite 0.3.6</title>
       <link>https://github.com/matthewrball/linklite/releases/tag/v0.3.6</link>
       <pubDate>Thu, 05 Nov 2026 03:25:28 +0000</pubDate>
