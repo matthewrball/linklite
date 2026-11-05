@@ -4,6 +4,12 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-11-05
+
+### Fixed
+
+- Expanding settings no longer pushes the menu-bar panel's header down for a moment. The panel's content stays pinned to its top edge and the glass grows downward from it, including during rapid reversals.
+
 ## [0.3.8] - 2026-11-05
 
 ### Changed
@@ -109,7 +115,8 @@ First tester build, released as **DisplayLink Lite**.
 - A still screen stays clean, with no stale boxes or flickering patches: changed areas get a follow-up pass once the screen settles, and frames cycle through all three of the dock's buffers.
 - Heavy motion (for example App Exposé on two 4K monitors) does not reset the dock: video across both monitors is held to 100 MB/s.
 
-[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.8...HEAD
+[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.9...HEAD
+[0.3.9]: https://github.com/matthewrball/linklite/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/matthewrball/linklite/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/matthewrball/linklite/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/matthewrball/linklite/compare/v0.3.5...v0.3.6

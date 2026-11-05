@@ -16,16 +16,22 @@ final class StatusPanelController {
 
     private(set) var isShown = false
     private var presentationID: UInt64 = 0
+    private var resizeID: UInt64 = 0
 
     init(model: PanelModel) {
         self.model = model
         // A hidden SwiftUI view can keep repeat-forever animations running. Build the view tree
         // only while presented, and release it after the closing fade finishes.
         hosting = NSHostingController(rootView: nil)
-        // Resize explicitly with the disclosure curve instead of letting preferred-size changes
-        // snap the window to its final height and recenter the content during the transition.
+        // The hosting view keeps a fixed, screen-tall size, pinned to the top of a flipped container;
+        // the window only clips it. Resizing the host itself moves its layers with the bottom edge
+        // until SwiftUI catches up, and during a disclosure SwiftUI animates that correction, so the
+        // header visibly drops and returns.
         hosting.sizingOptions = []
-        panel = Panel(contentViewController: hosting)
+        panel = Panel()
+        let container = TopAnchoredView()
+        container.addSubview(hosting.view)
+        panel.contentView = container
         panel.styleMask = [.borderless, .nonactivatingPanel]
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -102,16 +108,30 @@ final class StatusPanelController {
         x = min(max(x, visible.minX + 8 - margin), visible.maxX - size.width - 8 + margin)
         let top = (icon.minY - 6 + margin).rounded()
         let frame = NSRect(x: x.rounded(), y: top - size.height, width: size.width, height: size.height)
+        let host = NSSize(width: size.width, height: max(visible.height, size.height))
+        if hosting.view.frame.size != host {
+            hosting.view.frame = NSRect(origin: .zero, size: host)
+        }
+        resizeID &+= 1
         guard panel.frame != frame else { return }
-        if panel.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = DisclosureMotion.duration
-                context.timingFunction = DisclosureMotion.timingFunction
-                panel.animator().setFrame(frame, display: false)
+        if panel.isVisible, frame.height < panel.frame.height,
+           !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            // Clip the window only after the glass has finished collapsing inside it. A newer
+            // size, such as a reversal back to expanded, cancels this.
+            let pending = resizeID
+            DispatchQueue.main.asyncAfter(deadline: .now() + DisclosureMotion.duration) { [weak self] in
+                guard let self, self.isShown, self.resizeID == pending else { return }
+                self.panel.setFrame(frame, display: true)
             }
         } else {
-            panel.setFrame(frame, display: false)
+            // Growing takes the final size at once; the extra area is transparent while the glass
+            // expands into it.
+            panel.setFrame(frame, display: true)
         }
+    }
+
+    private final class TopAnchoredView: NSView {
+        override var isFlipped: Bool { true }
     }
 
     private final class Panel: NSPanel {
