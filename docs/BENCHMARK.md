@@ -87,7 +87,7 @@ LinkLite captures with ScreenCaptureKit. The older `CGDisplayStream`, which Disp
 
 ## Hardware-free optimization checks — 2026-11-04
 
-These are local, narrowly scoped measurements of the unreleased engineering changes, not a rerun of the two-monitor A/B benchmark above.
+These are local, narrowly scoped, hardware-free measurements of the engineering changes shipped in the v0.3.7 prerelease, not a rerun of the two-monitor A/B benchmark above.
 
 | Scenario | Before | After |
 |---|---:|---:|
@@ -102,7 +102,7 @@ Capture smoke checks exercised initial/full, partial, empty, and scaled damage t
 
 ## README graphics
 
-The lead graphic uses the saved real-dock results in [`benchmark/results.json`](benchmark/results.json), not the unreleased component checks. The memory headline compares each driver's mean memory across desktop and animation: `100 × (1 − 134.0549 / 512.8444) = 73.86%`, rounded to **74% less memory**. The supporting whole-GPU-busy figure under motion is `100 × (1 − 15.2308 / 32.9556) = 53.78%`, rounded to **54% lower**. Neither is a new measurement of the optimized build.
+The lead graphic uses the saved historical LinkLite 0.2.0 real-dock results in [`benchmark/results.json`](benchmark/results.json), not the v0.3.7 component checks. The memory headline compares each driver's mean memory across desktop and animation: `100 × (1 − 134.0549 / 512.8444) = 73.86%`, rounded to **74% less memory**. The supporting whole-GPU-busy figure under motion is `100 × (1 − 15.2308 / 32.9556) = 53.78%`, rounded to **54% lower**. Neither is a new measurement of v0.3.7.
 
 The separate optimization graphic reads [`benchmark/optimizations-2026-11-04.json`](benchmark/optimizations-2026-11-04.json), which records the rounded measurements and structural counts described above. Its CPU reduction applies only to the hidden-panel host; its packing-time reduction is not an increase in display frame rate. The copied-byte count is for the synthetic full-frame case, not retained RAM.
 

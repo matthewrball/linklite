@@ -1,6 +1,6 @@
 {
   "date": "2026-11-04",
-  "status": "Unreleased",
+  "status": "v0.3.7 prerelease",
   "scope": "Hardware-free component checks, not a live-dock benchmark",
   "hidden_panel": {
     "before_cpu_pct": 9.54,

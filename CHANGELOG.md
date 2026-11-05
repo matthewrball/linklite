@@ -2,7 +2,7 @@
 
 All notable changes to LinkLite are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.7] - 2026-11-04
 
 ### Changed
 
@@ -10,7 +10,8 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 - Release the panel's SwiftUI view tree after dismissal so its status pulse does not continue consuming CPU while hidden.
 - Reuse capture damage, strip-candidate, and cursor-image buffers; pack cached video strips and USB transfers without redundant full-body copies.
 - Build with locked dependency versions and select the rustup compiler consistently, avoiding Homebrew standard-library deployment-target mismatches.
-- The README leads with the measured memory saving versus DisplayLink Manager, with updated light/dark graphics and a separate, explicitly unreleased optimization section.
+- The README leads with the measured memory saving versus DisplayLink Manager, with updated light/dark graphics and a separate component-optimization section.
+- Bundle project and third-party license notices in the app and publish a separate, commit-pinned source archive with locked dependency sources.
 
 ### Fixed
 
@@ -96,6 +97,7 @@ First tester build, released as **DisplayLink Lite**.
 - A still screen stays clean, with no stale boxes or flickering patches: changed areas get a follow-up pass once the screen settles, and frames cycle through all three of the dock's buffers.
 - Heavy motion (for example App Exposé on two 4K monitors) does not reset the dock: video across both monitors is held to 100 MB/s.
 
+[0.3.7]: https://github.com/matthewrball/linklite/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/matthewrball/linklite/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/matthewrball/linklite/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/matthewrball/linklite/compare/v0.3.3...v0.3.4

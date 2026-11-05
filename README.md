@@ -15,7 +15,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--2.0-2FA77A" alt="GPL-2.0-or-later"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-2FA77A" alt="macOS 14 Sonoma or later">
   <img src="https://img.shields.io/badge/Apple%20silicon-native-2FA77A" alt="Apple silicon">
-  <a href="https://github.com/matthewrball/linklite/releases/latest"><img src="https://img.shields.io/github/v/release/matthewrball/linklite?include_prereleases&color=2FA77A&label=release" alt="Latest release"></a>
+  <a href="https://github.com/matthewrball/linklite/releases"><img src="https://img.shields.io/github/v/release/matthewrball/linklite?include_prereleases&color=2FA77A&label=release" alt="Latest release"></a>
   <a href="https://github.com/matthewrball/linklite/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/matthewrball/linklite/ci.yml?branch=main&label=CI" alt="CI"></a>
 </p>
 
@@ -31,16 +31,18 @@
 </p>
 
 <p align="center">
-  <sub>Measured with two 4K monitors on the same Mac. <a href="docs/BENCHMARK.md">Full benchmark, method, and CPU tradeoff →</a></sub>
+  <sub>74% less memory in the historical LinkLite 0.2.0 benchmark with two 4K monitors—not re-measured for v0.3.7. <a href="docs/BENCHMARK.md">Full benchmark, method, and CPU tradeoff →</a></sub>
 </p>
 
 ---
 
 **LinkLite** is a native macOS menu-bar app that talks to DisplayLink USB docks directly. For each monitor on the dock it creates a macOS display, sends only the parts of the screen that change, and lets the dock draw your mouse pointer. Tested on a Humanscale M/Connect 2 driving two 4K monitors at 60 Hz.
 
+**Beta software.** v0.3.7 is a prerelease. Its refactor still needs live-hardware validation of two-monitor rendering, repeated unplug/replug and sleep/wake, the receive-queue high-water mark, and an eight-hour memory run. See the [engineering gates](docs/DEVELOPMENT.md#engineering-hardening--2026-11-04-v037-prerelease).
+
 ## Install
 
-1. Download `LinkLite-<version>.dmg` from [Releases](https://github.com/matthewrball/linklite/releases/latest), open it, and drag **LinkLite** into Applications.
+1. Download `LinkLite-<version>.dmg` from [Releases](https://github.com/matthewrball/linklite/releases), open it, and drag **LinkLite** into Applications.
 2. Quit DisplayLink Manager (menu-bar icon › Quit). Only one app can drive the dock at a time.
 3. Open LinkLite and allow **Screen & System Audio Recording** when asked ([why?](#why-does-linklite-need-screen-recording)), then quit and reopen it from its menu-bar icon.
 4. Your monitors light up within a few seconds. Turn on **Open at Login** from the menu-bar icon.
@@ -59,7 +61,7 @@ Requires macOS 14 Sonoma or later on Apple silicon, and a USB 3 (5 Gbps) link to
 
 ## Latest optimizations
 
-**In development—not in the latest release yet.** The next release cuts avoidable work without changing the display pipeline or encoded output:
+**Shipped in the v0.3.7 prerelease.** This refactor cuts avoidable work without changing the display pipeline or encoded output:
 
 - The closed menu no longer keeps its status animation running.
 - Capture, cursor, and strip-candidate buffers are reused; frame packing avoids duplicate copies.
@@ -68,7 +70,7 @@ Requires macOS 14 Sonoma or later on Apple silicon, and a USB 3 (5 Gbps) link to
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/optimizations-dark.png">
-    <img src="docs/assets/optimizations-light.png" alt="Unreleased hardware-free checks: hidden searching-panel CPU decreased from 9.54% to 0.18%; packing 50 cached 4K frames took 119.2 ms instead of 204.1 ms. That synthetic full-frame case avoids about 40 MiB of duplicate copying and 16,200 temporary strip-body allocations, not retained RAM." width="760">
+    <img src="docs/assets/optimizations-light.png" alt="v0.3.7 hardware-free component checks: hidden searching-panel CPU decreased from 9.54% to 0.18%; packing 50 cached 4K frames took 119.2 ms instead of 204.1 ms. That synthetic full-frame case avoids about 40 MiB of duplicate copying and 16,200 temporary strip-body allocations, not retained RAM." width="760">
   </picture>
 </p>
 
@@ -83,7 +85,7 @@ These are component checks, not new whole-app memory, display-frame-rate, or liv
 | CPU, live desktop | 55% | **2%** |
 | CPU, 60 fps motion | 338% | **20%** |
 
-The tradeoff: DisplayLink Manager compresses video on the GPU; LinkLite compresses it on the CPU. In this benchmark LinkLite used less memory and less whole-system GPU under motion, but more CPU. These results have not been extrapolated to the unreleased build. Method, per-run numbers, and raw data: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+The tradeoff: DisplayLink Manager compresses video on the GPU; LinkLite compresses it on the CPU. In this benchmark LinkLite used less memory and less whole-system GPU under motion, but more CPU. These results have not been extrapolated to v0.3.7. Method, per-run numbers, and raw data: [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 ## Compatibility
 

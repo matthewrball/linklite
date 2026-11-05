@@ -4,7 +4,7 @@ Thanks for your interest. LinkLite is early, and dock compatibility reports are 
 
 ## Getting set up
 
-Requirements: an **Apple Silicon Mac** supported by **Xcode 26 or newer** (or the corresponding command-line tools with the macOS 26 SDK), and a **Rust** toolchain. Building the Liquid Glass interface needs the newer SDK; the resulting app still targets **macOS 14** and later. Install Rust with [rustup](https://rustup.rs); Homebrew's Rust ships a standard library built for the host macOS version, so an app built with it refuses to run on older macOS releases. `scripts/build-app.sh` prefers rustup's stable toolchain when both are installed.
+Requirements: an **Apple Silicon Mac** supported by **Xcode 26 or newer** (or the corresponding command-line tools with the macOS 26 SDK), a **Rust** toolchain, and **Python 3.9 or newer** for packaging license notices and release sources. The Python helper uses only the standard library. Building the Liquid Glass interface needs the newer SDK; the resulting app still targets **macOS 14** and later. Install Rust with [rustup](https://rustup.rs); Homebrew's Rust ships a standard library built for the host macOS version, so an app built with it refuses to run on older macOS releases. `scripts/build-app.sh` prefers rustup's stable toolchain when both are installed.
 
 ```sh
 scripts/build-app.sh          # builds the engine and the app, signs dist/LinkLite.app
@@ -24,6 +24,20 @@ The project is split into:
 - **`Sources/CDLLite/`**: the C module that exposes the engine's C ABI and the private CoreGraphics virtual-display classes to Swift.
 - **`Sources/dlprobe/`**, **`Sources/DLProbeCore/`**: a read-only USB preflight tool for checking a dock's link speed and descriptors.
 - **`docs/`**: [development notes](docs/DEVELOPMENT.md) (the hardware gates and their status) and the [benchmark method](docs/BENCHMARK.md).
+
+## Release source archives
+
+The app bundle includes project and third-party license notices. Each release also publishes a separate source archive, so dependency source does not increase the installed app's size.
+
+After committing the release source, create its archive from the full commit SHA:
+
+```sh
+python3 scripts/release-sources.py source \
+  --commit <full-release-commit-sha> \
+  --output dist/LinkLite-<version>-source.tar.gz
+```
+
+This packages the committed tree, not uncommitted working files, with locked Rust dependency sources, an archive-local Cargo configuration, and Sparkle source at its pinned revision. `SOURCE-RELEASE.txt` records provenance and build prerequisites. Apple and Rust toolchains are not bundled. Creating the archive needs access to the pinned dependency sources; normal SwiftPM builds still fetch the pinned Sparkle binary unless it is already cached.
 
 ## Running the tests
 

@@ -42,7 +42,9 @@ rm -rf "$sparkle/Versions/B/"{Headers,PrivateHeaders,Modules} "$sparkle/"{Header
 for binary in Sparkle Autoupdate Updater.app/Contents/MacOS/Updater; do
     lipo "$sparkle/Versions/B/$binary" -thin arm64 -output "$sparkle/Versions/B/$binary"
 done
-cp .build/artifacts/sparkle/Sparkle/LICENSE "$app/Contents/Resources/Sparkle-LICENSE.txt"
+# Collect the project's and locked dependencies' notices before signing the bundle.
+# The collector uses Python's standard library and fails if a required notice is missing.
+python3 scripts/release-sources.py notices --resources "$app/Contents/Resources"
 
 identity="${LINKLITE_SIGN_IDENTITY:-}"
 if [[ -z "$identity" ]]; then

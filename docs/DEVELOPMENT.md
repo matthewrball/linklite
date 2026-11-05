@@ -88,7 +88,9 @@ Status 2026-11-03: criteria 1 and 2 met on the monitors. Not yet measured: the e
 
 Protected-content playback is out of scope for the first implementation.
 
-## Engineering hardening — 2026-11-04 (unreleased)
+## Engineering hardening — 2026-11-04 (v0.3.7 prerelease)
+
+These changes ship in v0.3.7. LinkLite remains beta software; this prerelease does not close the outstanding hardware gates or establish 1.0 readiness.
 
 The C ABI and wire encoding are unchanged. Capture damage is converted lazily at the ABI boundary, frame spans are checked before constructing Rust slices, and cursor/damage/candidate storage is reused. Cached encoded strips are borrowed during packing, and USB chunks are filled without an intermediate full-frame stream. Byte-equivalence regressions cover the affected encoding paths. See [BENCHMARK.md](BENCHMARK.md#hardware-free-optimization-checks--2026-11-04) for the limited measurements and their method.
 
