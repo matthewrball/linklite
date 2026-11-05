@@ -2,6 +2,12 @@
 
 All notable changes to LinkLite are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- The menu-bar menu is now a Liquid Glass panel (a translucent material before macOS 26): a live status light, a card for each monitor with its resolution and refresh rate, switches for Open at login and Automatic updates, and Check for Updates and Quit (⌘Q). Esc or a click elsewhere closes it.
+
 ## [0.3.1] - 2026-11-04
 
 ### Changed

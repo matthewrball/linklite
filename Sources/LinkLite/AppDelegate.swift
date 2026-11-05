@@ -8,11 +8,12 @@ import ServiceManagement
 private let log = Logger(subsystem: "com.ball.linklite", category: "app")
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private let host = DisplayHost()
     private let updates = UpdateManager()
     private var statusItem: NSStatusItem?
-    private let menu = NSMenu()
+    private let model = PanelModel()
+    private lazy var panel = StatusPanelController(model: model)
     private var workspaceObservers: [NSObjectProtocol] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -24,15 +25,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.button?.title = "DL"
         }
         item.button?.toolTip = "LinkLite"
-        menu.delegate = self
-        menu.autoenablesItems = false
-        item.menu = menu
+        item.button?.target = self
+        item.button?.action = #selector(togglePanel)
         statusItem = item
 
+        model.toggleOpenAtLogin = { [weak self] in self?.toggleOpenAtLogin() }
+        model.toggleAutomaticUpdates = { [weak self] in self?.toggleAutomaticUpdates() }
+        model.checkForUpdates = { [weak self] in self?.checkForUpdates() }
+        model.openScreenRecordingSettings = { [weak self] in self?.openScreenRecordingSettings() }
+        model.quit = { [weak self] in self?.quit() }
+        panel.onShow = { [weak self] in
+            self?.host.refreshScreenRecordingAccess()
+            self?.refreshPanel()
+        }
+
         observeSleepAndWake()
-        host.onChange = { [weak self] in self?.rebuildMenu() }
+        host.onChange = { [weak self] in self?.refreshPanel() }
         host.start()
-        rebuildMenu()
+        refreshPanel()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -59,90 +69,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    // MARK: Menu
+    // MARK: Panel
 
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        host.refreshScreenRecordingAccess()
-        rebuildMenu()
+    @objc private func togglePanel() {
+        guard let button = statusItem?.button else { return }
+        panel.toggle(from: button)
     }
 
-    private func rebuildMenu() {
-        menu.removeAllItems()
-
-        menu.addItem(disabledItem(engineStatusText()))
-
-        let heads = host.heads.values.sorted { $0.monitor.head < $1.monitor.head }
-        if !heads.isEmpty {
-            menu.addItem(.separator())
-            for head in heads {
-                let monitor = head.monitor
-                let item = disabledItem("\(monitor.name) — \(monitor.width)×\(monitor.height) @ \(monitor.effectiveRefreshHz) Hz")
-                if let problem = head.problem {
-                    item.toolTip = problem
-                    menu.addItem(item)
-                    menu.addItem(disabledItem("    \(problem)"))
-                } else {
-                    menu.addItem(item)
-                }
+    private func refreshPanel() {
+        if host.screenRecordingDenied {
+            model.status = .needsPermission
+        } else {
+            switch host.engineState {
+            case DLL_STATE_ENGAGED: model.status = .connected
+            case DLL_STATE_RETRYING: model.status = .retrying
+            case DLL_STATE_SEARCHING: model.status = .searching
+            default: model.status = .starting
             }
         }
-
-        if host.screenRecordingDenied {
-            menu.addItem(.separator())
-            menu.addItem(disabledItem("Screen Recording permission is required"))
-            menu.addItem(actionItem("Open Screen Recording Settings…", #selector(openScreenRecordingSettings)))
-        }
-
-        menu.addItem(.separator())
-        let login = actionItem("Open at Login", #selector(toggleOpenAtLogin))
-        switch SMAppService.mainApp.status {
-        case .enabled: login.state = .on
-        case .requiresApproval: login.state = .mixed
-        default: login.state = .off
-        }
-        menu.addItem(login)
-
-        if updates.isAvailable {
-            menu.addItem(.separator())
-            let check = actionItem("Check for Updates…", #selector(checkForUpdates))
-            check.isEnabled = updates.canCheckForUpdates
-            menu.addItem(check)
-            let auto = actionItem("Download Updates Automatically", #selector(toggleAutomaticUpdates))
-            auto.state = updates.automaticallyDownloadsUpdates ? .on : .off
-            menu.addItem(auto)
-        }
-
-        menu.addItem(.separator())
-        let quit = actionItem("Quit LinkLite", #selector(quit))
-        quit.keyEquivalent = "q"
-        menu.addItem(quit)
+        model.message = host.engineMessage
+        model.monitors = host.heads.values
+            .sorted { $0.monitor.head < $1.monitor.head }
+            .map { head in
+                let monitor = head.monitor
+                return PanelModel.Monitor(
+                    id: monitor.head,
+                    name: monitor.name,
+                    detail: "\(monitor.width) × \(monitor.height) · \(monitor.effectiveRefreshHz) Hz",
+                    problem: head.problem
+                )
+            }
+        let login = SMAppService.mainApp.status
+        model.openAtLogin = login == .enabled
+        model.loginNeedsApproval = login == .requiresApproval
+        model.updatesAvailable = updates.isAvailable
+        model.automaticUpdates = updates.automaticallyDownloadsUpdates
+        model.canCheckForUpdates = updates.canCheckForUpdates
     }
 
-    /// Engine messages describe their own state ("Looking for the DisplayLink dock…",
-    /// "Dock connected: 2 monitors"), so they are shown as they are.
-    private func engineStatusText() -> String {
-        host.engineMessage.isEmpty ? "Starting…" : host.engineMessage
-    }
-
-    private func disabledItem(_ title: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        return item
-    }
-
-    private func actionItem(_ title: String, _ action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-        item.target = self
-        return item
-    }
-
-    @objc private func openScreenRecordingSettings() {
+    private func openScreenRecordingSettings() {
+        panel.hide()
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
             NSWorkspace.shared.open(url)
         }
     }
 
-    @objc private func toggleOpenAtLogin() {
+    private func toggleOpenAtLogin() {
         let service = SMAppService.mainApp
         do {
             switch service.status {
@@ -159,19 +131,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             alert.messageText = "Could not change Open at Login"
             alert.runModal()
         }
-        rebuildMenu()
+        refreshPanel()
     }
 
-    @objc private func checkForUpdates() {
+    private func checkForUpdates() {
+        panel.hide()
         updates.checkForUpdates()
     }
 
-    @objc private func toggleAutomaticUpdates() {
+    private func toggleAutomaticUpdates() {
         updates.setAutomaticallyDownloadsUpdates(!updates.automaticallyDownloadsUpdates)
-        rebuildMenu()
+        refreshPanel()
     }
 
-    @objc private func quit() {
+    private func quit() {
         host.stop()
         NSApp.terminate(nil)
     }
