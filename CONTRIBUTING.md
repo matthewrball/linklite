@@ -1,6 +1,6 @@
 # Contributing to LinkLite
 
-Thanks for your interest. LinkLite is early, and dock compatibility reports are as valuable as code: every dock and monitor combination behaves a little differently, and the project has only been tested on a few.
+Thanks for your interest. LinkLite is early, and dock compatibility reports are as valuable as code: every dock and monitor combination behaves a little differently. The recorded hardware baseline is a Humanscale M/Connect 2 with two HP Z27k G3 monitors; other models are not individually certified.
 
 ## Getting set up
 
@@ -38,6 +38,21 @@ python3 scripts/release-sources.py source \
 ```
 
 This packages the committed tree, not uncommitted working files, with locked Rust dependency sources, an archive-local Cargo configuration, and Sparkle source at its pinned revision. `SOURCE-RELEASE.txt` records provenance and build prerequisites. Apple and Rust toolchains are not bundled. Creating the archive needs access to the pinned dependency sources; normal SwiftPM builds still fetch the pinned Sparkle binary unless it is already cached.
+
+## Preparing signed releases
+
+Use the [release and recovery runbook](docs/RELEASING.md) for qualification, staging, validation and publication order. Release packaging requires an explicit channel and owner-provided Developer ID identity and notarization profile:
+
+```sh
+LINKLITE_SIGN_IDENTITY='<Developer ID fingerprint>' LINKLITE_NOTARY_PROFILE='<keychain profile>' \
+  scripts/release.sh --channel candidate --candidate-base-url https://example.invalid/actual-staging-directory
+
+LINKLITE_SIGN_IDENTITY='<Developer ID fingerprint>' LINKLITE_NOTARY_PROFILE='<keychain profile>' \
+  scripts/release.sh --channel public
+```
+
+Replace all placeholders before use. Candidate assets and their separate feed stay in `dist/candidates/`; candidate mode does not redirect the shipped updater. Public mode updates root `appcast.xml`. Upload and validate assets before publishing any feed. Do not execute the public command until promotion is approved; do not reuse already released versions. Release-contract regression checks: `python3 scripts/test-release.py` (macOS, Python 3.9+).
+
 
 ## Running the tests
 

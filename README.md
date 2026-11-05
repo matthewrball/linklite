@@ -38,7 +38,7 @@
 
 **LinkLite** is a native macOS menu-bar app that talks to DisplayLink USB docks directly. For each monitor on the dock it creates a macOS display, sends only the parts of the screen that change, and lets the dock draw your mouse pointer. Tested on a Humanscale M/Connect 2 driving two 4K monitors at 60 Hz.
 
-**Beta software.** v0.3.7 is a prerelease. Its refactor still needs live-hardware validation of two-monitor rendering, repeated unplug/replug and sleep/wake, the receive-queue high-water mark, and an eight-hour memory run. See the [engineering gates](docs/DEVELOPMENT.md#engineering-hardening--2026-11-04-v037-prerelease).
+**Beta software.** v0.3.7 is publicly released; that does not establish 1.0 readiness. Its refactor still needs live-hardware validation of two-monitor rendering, repeated unplug/replug and sleep/wake, the receive-queue high-water mark, and an eight-hour memory run. See the [engineering gates](docs/DEVELOPMENT.md#engineering-hardening--2026-11-04-v037).
 
 ## Install
 
@@ -61,7 +61,7 @@ Requires macOS 14 Sonoma or later on Apple silicon, and a USB 3 (5 Gbps) link to
 
 ## Latest optimizations
 
-**Shipped in the v0.3.7 prerelease.** This refactor cuts avoidable work without changing the display pipeline or encoded output:
+**Shipped in v0.3.7.** This refactor cuts avoidable work without changing the display pipeline or encoded output:
 
 - The closed menu no longer keeps its status animation running.
 - Capture, cursor, and strip-candidate buffers are reused; frame packing avoids duplicate copies.
@@ -91,10 +91,13 @@ The tradeoff: DisplayLink Manager compresses video on the GPU; LinkLite compress
 
 | | Status |
 |---|---|
-| DisplayLink DL-6xxx ("Ridge") docks, e.g. Humanscale M/Connect 2, Dell D6000 | **Tested** (M/Connect 2, two 4K60 monitors) |
+| Humanscale M/Connect 2 (DL-6xxx "Ridge") | Historically tested with two 4K60 monitors; v0.3.7 hardware requalification pending |
+| Dell D6000 and other DL-6xxx docks | Same protocol family; not individually certified |
 | DL-3xxx ("Ella") and DL-7400 ("Navarro") docks | Recognised by the protocol core; untested on macOS |
-| Macs | Apple silicon, macOS 14 or later |
+| Macs | Apple silicon, macOS 14 or later; Intel not supported |
 | Protected (HDCP) video playback | Not supported |
+
+macOS 14 is the minimum deployment target, not evidence of hardware or GUI testing on every supported macOS release. The recorded real-dock benchmark used macOS 26.6. See the [qualification matrix](docs/DEVELOPMENT.md#pre-10-qualification-matrix) for pending hardware and fresh-profile permission checks.
 
 Tried LinkLite with another dock? Please [file a dock report](https://github.com/matthewrball/linklite/issues/new?template=dock_report.yml), whether it worked or not.
 

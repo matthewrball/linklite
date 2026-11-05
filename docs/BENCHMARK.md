@@ -50,6 +50,43 @@ docs/benchmark/run.sh
 
 The run takes about six minutes. Leave the Mac alone while it runs. `run.log` and `samples.csv` are written to `$TMPDIR/linklite-bench` (override with `BENCH_OUT`); set `LINKLITE_APP` if LinkLite is not in `/Applications`.
 
+Use a unique output directory for each run: `run.sh` deletes any previous `run.log`, `samples.csv` and `stop` in that directory. It requires Google Chrome and controls driver application launches/quits. Its two-screen timeout only logs a warning; its quit loops do not enforce ownership release. Supervise the handoffs and stop the run if the outgoing driver remains alive or either screen is missing. Do not treat the resulting CSV as a valid comparison in that case.
+
+```sh
+BENCH_OUT="$HOME/linklite-bench-$(date +%Y%m%d-%H%M%S)" docs/benchmark/run.sh
+# Substitute the actual directory printed by run.sh:
+python3 docs/benchmark/summarize.py /path/to/run/samples.csv /path/to/run/results.json
+```
+
+`BENCH_ONLY=lite` runs only `lite1` without a Manager comparison. The summary averages `lite1` and `lite2` and scores only `desktop` and `animation`; it is not a memory-trend detector. Inspect missing samples, process exits and warnings before accepting means. Record exact installed app versions and source SHA separately.
+
+## Eight-hour memory qualification (pending)
+
+No eight-hour pass is recorded. Use the sampler directly, not repeated `run.sh` invocations: driver restarts would hide growth. Start the signed build with Manager quit and both heads verified at 4K60. Keep the Mac awake using normal owner-approved settings for this run; test sleep separately. Run from the repository root in a shell kept open for the duration:
+
+```sh
+OUT="$HOME/linklite-soak-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$OUT"
+printf 'lite1,desktop\n' > "$OUT/phase"
+python3 docs/benchmark/sampler.py "$OUT" &
+SAMPLER_PID=$!
+# Keep this shell open. Perform and timestamp the workload below for eight hours.
+# At the end (or on an aborted run):
+touch "$OUT/stop"
+wait "$SAMPLER_PID"
+```
+
+Do not execute the final two commands until the observation period ends. The sampler writes `samples.csv` afresh, samples about once a second, and stops when `stop` exists. It does not create the output directory, drive a workload, detect restarts, or enforce an eight-hour duration. Its `top` reader runs as a child; after shutdown confirm no sampler-owned `top` remains and terminate only that identified child if needed, not unrelated monitoring sessions.
+
+For each of eight hours, leave both heads at the same HiDPI mode for 45 minutes of desktop use followed by 15 minutes of the existing [`motion.html`](benchmark/motion.html) animation in a 1600×900 Chrome window on one external head; alternate the animated head each hour. Label transitions from a second shell with `printf 'lite1,animation\n' > /path/to/run/phase` and `printf 'lite1,desktop\n' > /path/to/run/phase`. Record actual window location, deviations, other workload, mode changes, and timestamps in an event log. Do not mix destructive hotplug testing into the baseline soak. Record the LinkLite PID at start/end and at hourly boundaries so a restart cannot masquerade as a memory improvement.
+
+Retain all rows and inspect the full LinkLite `mem_mb` time series. For each hour, report sample count, desktop last-ten-minute median, animation last-five-minute median and maximum; compare like phases rather than averaging different workloads. Require at least eight elapsed hours without process restart, unexplained sampling gaps, crash, dock reset or increasing retained-memory baseline across successive comparable windows. Report the first-to-last baseline difference and slope as well as the peak. If growth persists, or noise prevents distinguishing a plateau from growth, leave the gate failed/pending and extend or repeat with a controlled workload. Choose and record any numeric memory ceiling/noise tolerance **before** the run; there is no measured release-specific budget yet.
+
+`summarize.py` can produce supplementary phase means with the command above, but those means alone cannot establish bounded memory. `top` memory is not an allocation/leak trace, missing GPU counters are not proof of zero GPU work, and whole-GPU figures include other applications. Keep the raw data alongside any analysis.
+
+The original acceptance criterion also required materially lower CPU than Manager. The recorded A/B/A shows the opposite. That criterion remains **unresolved**, requiring either new representative evidence or an explicit owner-approved criterion revision—not a claim that memory savings satisfy both parts.
+
+
 ## Results
 
 Run on 2026-11-03: LinkLite 0.2.0 (pre-release build), DisplayLink Manager 16.1.25, macOS 26.6. Both drivers rendered each monitor at 1920x1080 points, 2x (3840x2160 pixels), checked in [`run-2026-11-03.log`](benchmark/run-2026-11-03.log). Raw samples: [`samples-2026-11-03.csv`](benchmark/samples-2026-11-03.csv); summary: [`results.json`](benchmark/results.json), produced by [`summarize.py`](benchmark/summarize.py).
@@ -87,7 +124,7 @@ LinkLite captures with ScreenCaptureKit. The older `CGDisplayStream`, which Disp
 
 ## Hardware-free optimization checks — 2026-11-04
 
-These are local, narrowly scoped, hardware-free measurements of the engineering changes shipped in the v0.3.7 prerelease, not a rerun of the two-monitor A/B benchmark above.
+These are local, narrowly scoped, hardware-free measurements of the engineering changes shipped in v0.3.7, not a rerun of the two-monitor A/B benchmark above.
 
 | Scenario | Before | After |
 |---|---:|---:|

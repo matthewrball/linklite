@@ -84,19 +84,57 @@ Status 2026-11-03: **working on both heads**: CGVirtualDisplay + ScreenCaptureKi
 - repeatable hotplug and sleep/wake without a process crash, dock reset, logout, or reboot
 - DisplayLink Manager remains installed until all criteria pass
 
-Status 2026-11-03: criteria 1 and 2 met on the monitors. Not yet measured: the eight-hour memory run, an A/B against DisplayLink Manager, and repeated sleep/wake and hotplug cycles.
+Status 2026-11-04: criteria 1 and 2 were met historically on the M/Connect 2 monitors. The [2026-11-03 A/B/A benchmark](BENCHMARK.md#results) measured lower memory but **higher CPU**, so the original lower-memory-and-CPU criterion remains unresolved, not passed. The owner must either demonstrate lower CPU on an agreed representative workload or explicitly revise that criterion with the tradeoff recorded before 1.0. Eight-hour bounded memory and repeated sleep/wake/hotplug remain pending; component checks do not close them.
 
 Protected-content playback is out of scope for the first implementation.
 
-## Engineering hardening — 2026-11-04 (v0.3.7 prerelease)
+## Engineering hardening — 2026-11-04 (v0.3.7)
 
-These changes ship in v0.3.7. LinkLite remains beta software; this prerelease does not close the outstanding hardware gates or establish 1.0 readiness.
+These changes ship in the publicly released v0.3.7. LinkLite remains beta software; publication does not close the outstanding hardware gates or establish 1.0 readiness.
 
 The C ABI and wire encoding are unchanged. Capture damage is converted lazily at the ABI boundary, frame spans are checked before constructing Rust slices, and cursor/damage/candidate storage is reused. Cached encoded strips are borrowed during packing, and USB chunks are filled without an intermediate full-frame stream. Byte-equivalence regressions cover the affected encoding paths. See [BENCHMARK.md](BENCHMARK.md#hardware-free-optimization-checks--2026-11-04) for the limited measurements and their method.
 
 The native dependency is pinned in `vendor/libusb1-sys/` with documented upstream descriptor-parser backports. The USB receive queue now has a hard capacity and fails closed on overflow. Teardown waits for all submitted transfer callbacks before releasing memory; if libusb never completes cancellation, shutdown can wait indefinitely. Do not replace that wait with a timeout that frees live callback state.
 
 Hardware-free regressions and signed application builds pass. Two-monitor rendering, physical unplug/replug, sleep/wake, the receive-queue high-water mark, and an eight-hour memory run still need live-hardware validation for these changes. These checks do not supersede the acceptance criteria above.
+
+## Pre-1.0 qualification matrix
+
+The full gates below remain **pending for the release build** as of 2026-11-05. The latest hardware probe found no DisplayLink USB device. An existing-profile v0.3.6 → v0.3.7 GUI update and settings expansion/collapse passed on macOS 26.6 with login/update choices and the signing identity preserved; this does not close the fresh-profile, attached-display or other-OS gates. Historical working-desktop observations above are not repeated-cycle qualification. Run on a spare dock or in an owner-approved maintenance window, with saved work and a usable built-in display. Keep DisplayLink Manager installed but quit, and disable neither security protections nor consent checks to obtain a pass.
+
+For every run, retain the exact app version/build and source SHA, macOS version/build, Mac/dock/monitor models, cable and USB link speed, monitor modes and scaling, start/end timestamps, operator, steps, expected/actual result, unified logs and benchmark CSV where relevant. Record each attempted cycle, including failed ones; do not discard failures as flakes. Use [contributor logging and dock-report instructions](../CONTRIBUTING.md#testing-on-a-dock). A pass applies only to the recorded combination.
+
+| Gate | Reproducible procedure | Required evidence / pass condition |
+|---|---|---|
+| Both heads, 4K60 and scaling | Confirm USB 3 with `swift run dlprobe`; attach both HP Z27k G3 monitors. Verify 3840×2160 at 60 Hz on each. Show text, pointer motion and the benchmark animation on each head, then both. Change each head between native and available HiDPI "looks like" modes and back, ten times per head. | Record actual refresh, pixel and point dimensions for each mode. No corruption, stale regions, missing pointer or lost display; both heads recover after each change. |
+| Eight-hour bounded memory | Follow the [soak procedure](BENCHMARK.md#eight-hour-memory-qualification-pending), without restarting LinkLite. | Complete time series, workload/event log and comparable-window memory analysis; no continuing upward trend or missing interval masked by an average. |
+| Physical hotplug | Twenty cycles: disconnect upstream USB, wait 10 s, reconnect, allow up to 60 s for both heads. Also repeat ten cycles for each monitor's display cable independently. | Both displays return in the recorded modes on every cycle, no crash, unexpected dock reset, USB stall, logout or reboot. |
+| Sleep/wake | Twenty user-initiated system sleep/wake cycles with both heads connected; wait at least 30 s asleep and allow up to 60 s after wake. Include five cycles with the dock disconnected while asleep and reconnected after wake. | No stale screens, missing heads or accumulated virtual displays; same failure rules as hotplug. Record each wake delay. |
+| Monitor power | Ten off/on cycles per monitor, then ten with both off/on. Leave off at least 30 s; also launch once with both off, then power them on. | Both heads are discovered and return to their selected modes within 60 s; the other head remains usable during single-head cycles. |
+| Quit during disconnect | Ten times, initiate normal menu-bar Quit immediately before/during upstream unplug. Observe process exit and reconnect only after exit. | Normal termination within 30 s and successful subsequent launch; a hang is a failed gate, not permission to free live USB state. |
+| Update during disconnect | In an isolated candidate test installation, exercise a signed newer candidate update with the dock connected, then disconnected during download, and during requested quit/relaunch. Keep the built-in display available. | Record offered/installed versions and consent, signature validation, normal exit and relaunch; no partial installation or ownership conflict. See [release staging](RELEASING.md#candidate-staging). |
+| DisplayLink Manager conflict | In a maintenance window, start LinkLite while Manager owns the dock, then test the reverse. Quit the owning app normally before retrying the other; never force simultaneous ownership. | Non-owner fails safely without disrupting the owner; after normal release the selected app can drive both heads. Record behavior rather than assuming automatic takeover. |
+| Fresh-profile consent and login | On an owner-approved fresh macOS account, launch the signed release without pre-existing Screen Recording permission; test deny, grant through Settings, quit/reopen, and revoke while running. Exercise Open at Login on/off and log out/in. | Honest permission UI, no capture before consent, recovery after grant/reopen, and login behavior matches selection. Do not reset the user's existing privacy database. |
+| Supported macOS UI | Repeat launch, permissions, menu-bar/settings UI, updater and attached-display checks on each macOS release claimed as tested, including macOS 14. | Per-OS receipts; deployment target and macOS CI compilation are not hardware/GUI compatibility proof. |
+
+The cycle counts and observation windows above define the next qualification campaign, not historical measurements. Stop on any crash, reset, stall, forced logout, unexpected capture or persistent corruption; preserve logs and file a failure before continuing. Receive-queue overflow must fail closed. Retain available queue diagnostics; if no high-water measurement is available, leave that evidence pending rather than infer it from a successful screen image.
+
+### Shutdown safety and recovery
+
+USB cancellation can hang indefinitely if libusb never returns all callbacks. This known risk remains open. Never "fix" it by timing out and freeing transfer or callback state still owned by libusb. A 30-second observation failure above does not authorize unsafe teardown. Save diagnostics from the built-in display; do not launch a second dock owner while the first remains alive. If normal quit cannot complete, stop qualification and have the owner perform a controlled recovery/reboot after saving work. Never terminate WindowServer or kernel_task. Re-test the failure on a spare setup before closing the gate.
+
+### Stable 1.0 decision
+
+- [ ] Complete the matrix with raw evidence, exact hardware/OS scope, and no unresolved safety failures.
+- [ ] Resolve the original lower-CPU criterion explicitly; retain the historical CPU tradeoff in public claims.
+- [ ] Resolve or explicitly disposition the shutdown-cancellation hang risk with ownership safety preserved.
+- [ ] Verify signed candidate install/update, clean-consent and supported-OS UI paths.
+- [ ] Verify the protected-main policy for the exact 1.0 head: required pull request and up-to-date `Build and test` CI, administrators covered, no force push/deletion, and release-contract checks passing. Read the effective GitHub policy; a green run alone does not establish protection.
+- [ ] Complete owner-controlled signing-key recovery verification and the [release/recovery runbook](RELEASING.md).
+- [ ] Review compatibility/support wording against actual evidence; keep [privacy](../PRIVACY.md) and [private vulnerability reporting](../SECURITY.md) links available without adding telemetry.
+
+Public v0.3.7 release evidence is recorded in the [release runbook](RELEASING.md#current-evidence); it is not a substitute for these gates.
+
 
 
 ## Safety boundaries

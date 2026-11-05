@@ -30,12 +30,12 @@ env:
 
 jobs:
   build-and-test:
-    name: Build and test (macOS 15, Xcode 26.2, Apple Silicon)
+    name: Build and test
     runs-on: macos-15
     timeout-minutes: 30
     steps:
       - name: Check out
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6, Node 24
         with:
           persist-credentials: false
 
@@ -58,6 +58,9 @@ jobs:
       - name: Test native USB descriptor boundaries (ASan/UBSan)
         run: scripts/test-usb-descriptors.sh
 
+      - name: Test release isolation and failure handling
+        run: python3 scripts/test-release.py
+
       - name: Test engine
         run: cargo test --locked --manifest-path engine/Cargo.toml
 
@@ -72,8 +75,8 @@ jobs:
       - name: Build engine (release)
         run: cargo build --locked --release --manifest-path engine/Cargo.toml
 
-      - name: Build app (release)
-        run: swift build --force-resolved-versions -c release --product LinkLite
+      - name: Build app bundle and license notices
+        run: scripts/build-app.sh
 
       - name: Test Swift package
         run: swift test --force-resolved-versions
