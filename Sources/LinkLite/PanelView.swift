@@ -38,12 +38,11 @@ final class PanelModel: ObservableObject {
 /// The brand mint, from the icon.
 private let mint = Color(red: 0.18, green: 0.65, blue: 0.48)
 
-/// Shared by SwiftUI and the native panel so disclosure and window resizing stay in step.
+/// Shared by SwiftUI and the native panel, which clips its window only after a collapse finishes.
 @MainActor
 enum DisclosureMotion {
     static let duration = 0.14
     static let animation = Animation.timingCurve(0.22, 0.61, 0.36, 1, duration: duration)
-    static let timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 0.61, 0.36, 1)
 }
 
 struct PanelView: View {
@@ -92,8 +91,8 @@ struct PanelView: View {
         .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
         .padding(Self.shadowMargin)
         .fixedSize()
-        // The window animates to the content's preferred size using the same disclosure curve.
-        // Keep the content top-aligned while the native frame catches up.
+        // The window grows to the final size at once and shrinks on the disclosure curve. Keep the
+        // content top-aligned so the glass animates downward from a fixed top edge.
         .onGeometryChange(for: CGSize.self) { $0.size } action: { onSizeChange($0) }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
