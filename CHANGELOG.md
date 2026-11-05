@@ -2,6 +2,12 @@
 
 All notable changes to LinkLite are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.3] - 2026-11-04
+
+### Fixed
+
+- The status light and its title now breathe in step while LinkLite looks for the dock: both shrink and dim together, then swell back.
+
 ## [0.3.2] - 2026-11-04
 
 ### Changed
@@ -53,6 +59,7 @@ First tester build, released as **DisplayLink Lite**.
 - A still screen stays clean, with no stale boxes or flickering patches: changed areas get a follow-up pass once the screen settles, and frames cycle through all three of the dock's buffers.
 - Heavy motion (for example App Exposé on two 4K monitors) does not reset the dock: video across both monitors is held to 100 MB/s.
 
+[0.3.3]: https://github.com/matthewrball/linklite/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/matthewrball/linklite/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/matthewrball/linklite/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/matthewrball/linklite/compare/v0.2.0...v0.3.0

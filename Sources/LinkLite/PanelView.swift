@@ -125,11 +125,13 @@ private struct StatusCard: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            StatusOrb(color: color, inhale: pulsing && breathe)
+            StatusOrb(color: color, breath: breath)
             VStack(alignment: .leading, spacing: 2) {
+                // Breathes with the light: smaller and dimmer as it shrinks, full as it swells.
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
-                    .opacity(pulsing && breathe ? 0.45 : 1)
+                    .scaleEffect(1 - 0.04 * (1 - breath), anchor: .leading)
+                    .opacity(0.6 + 0.4 * breath)
                 if let subtitle {
                     Text(subtitle)
                         .font(.system(size: 11.5))
@@ -195,24 +197,30 @@ private struct StatusCard: View {
     }
 
     private var pulsing: Bool { model.status != .connected && model.status != .needsPermission }
+
+    /// 1 at the top of the breath (and whenever the light is steady), 0 at the bottom.
+    private var breath: Double { pulsing && !breathe ? 0 : 1 }
 }
 
-/// A glowing status light; its halo swells and fades while LinkLite is still looking for the dock.
+/// A glowing status light. While LinkLite looks for the dock it breathes: the light and its halo
+/// shrink and dim together, then swell back.
 private struct StatusOrb: View {
     let color: Color
-    let inhale: Bool
+    /// 0 (exhaled) to 1 (full).
+    let breath: Double
 
     var body: some View {
         ZStack {
             Circle()
-                .fill(color.opacity(0.18))
+                .fill(color.opacity(0.2))
                 .frame(width: 30, height: 30)
-                .scaleEffect(inhale ? 1.15 : 1)
-                .opacity(inhale ? 0.5 : 1)
+                .scaleEffect(0.75 + 0.25 * breath)
+                .opacity(0.35 + 0.65 * breath)
             Circle()
                 .fill(color.gradient)
                 .frame(width: 11, height: 11)
-                .shadow(color: color.opacity(0.7), radius: 5)
+                .scaleEffect(0.85 + 0.15 * breath)
+                .shadow(color: color.opacity(0.35 + 0.35 * breath), radius: 5)
         }
         .frame(width: 32, height: 32)
     }
