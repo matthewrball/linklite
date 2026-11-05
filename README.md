@@ -103,10 +103,6 @@ The dock speaks DisplayLink's proprietary, encrypted protocol. LinkLite's engine
 
 macOS has no public way for an app to provide a display: Apple offers no display driver framework, and display kernel extensions no longer work on Apple silicon. So every USB display product, DisplayLink Manager included, creates a virtual display and reads its pixels back with ScreenCaptureKit, which macOS puts behind the Screen Recording permission. LinkLite captures only the virtual displays it creates for your dock, never your built-in screen, and the pixels go nowhere but the USB dock.
 
-### Can I switch back to DisplayLink Manager?
-
-Yes. Quit LinkLite and open DisplayLink Manager. Nothing is uninstalled or changed on your system.
-
 ### Is this made by DisplayLink or Synaptics?
 
 No. LinkLite is an independent open-source project and is not affiliated with or endorsed by Synaptics or DisplayLink. DisplayLink is a trademark of Synaptics Incorporated, used here only to describe compatibility.
