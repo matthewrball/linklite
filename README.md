@@ -43,10 +43,6 @@
 
 Requires macOS 14 Sonoma or later on Apple silicon, and a USB 3 (5 Gbps) link to the dock. From then on LinkLite keeps itself up to date.
 
-<p align="center">
-  <img src="docs/assets/installer.png" alt="The LinkLite installer: drag LinkLite into Applications" width="600">
-</p>
-
 ## Why LinkLite
 
 - **Light on your Mac.** 3.8x less memory than DisplayLink Manager, a 4 MB app instead of 21 MB, and about half the GPU load under heavy motion. LinkLite's own process never touches the GPU. ([Benchmark](docs/BENCHMARK.md))
