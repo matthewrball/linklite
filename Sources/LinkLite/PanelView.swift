@@ -27,8 +27,6 @@ final class PanelModel: ObservableObject {
     @Published var automaticUpdates = false
     @Published var canCheckForUpdates = false
 
-    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-
     var toggleOpenAtLogin: () -> Void = {}
     var toggleAutomaticUpdates: () -> Void = {}
     var checkForUpdates: () -> Void = {}
@@ -75,14 +73,6 @@ struct PanelView: View {
             Text("LinkLite")
                 .font(.system(size: 15, weight: .semibold))
             Spacer()
-            if !model.version.isEmpty {
-                Text("v\(model.version)")
-                    .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(.primary.opacity(0.06), in: Capsule())
-            }
         }
         .padding(.horizontal, 4)
         .padding(.top, 2)
@@ -129,13 +119,17 @@ struct PanelView: View {
 
 private struct StatusCard: View {
     @ObservedObject var model: PanelModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// One breath drives both the light and the title, so they rise and fall together.
+    @State private var breathe = false
 
     var body: some View {
         HStack(spacing: 12) {
-            StatusOrb(color: color, pulsing: pulsing)
+            StatusOrb(color: color, inhale: pulsing && breathe)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
+                    .opacity(pulsing && breathe ? 0.45 : 1)
                 if let subtitle {
                     Text(subtitle)
                         .font(.system(size: 11.5))
@@ -153,6 +147,14 @@ private struct StatusCard: View {
         }
         .padding(12)
         .card()
+        .onAppear { animate() }
+        .onChange(of: pulsing) { animate() }
+    }
+
+    private func animate() {
+        breathe = false
+        guard pulsing, !reduceMotion else { return }
+        withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { breathe = true }
     }
 
     private var title: String {
@@ -195,34 +197,24 @@ private struct StatusCard: View {
     private var pulsing: Bool { model.status != .connected && model.status != .needsPermission }
 }
 
-/// A glowing status light; it breathes while LinkLite is still looking for the dock.
+/// A glowing status light; its halo swells and fades while LinkLite is still looking for the dock.
 private struct StatusOrb: View {
     let color: Color
-    let pulsing: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var breathe = false
+    let inhale: Bool
 
     var body: some View {
         ZStack {
             Circle()
                 .fill(color.opacity(0.18))
                 .frame(width: 30, height: 30)
-                .scaleEffect(pulsing && breathe ? 1.15 : 1)
-                .opacity(pulsing && breathe ? 0.5 : 1)
+                .scaleEffect(inhale ? 1.15 : 1)
+                .opacity(inhale ? 0.5 : 1)
             Circle()
                 .fill(color.gradient)
                 .frame(width: 11, height: 11)
                 .shadow(color: color.opacity(0.7), radius: 5)
         }
         .frame(width: 32, height: 32)
-        .onAppear { animate() }
-        .onChange(of: pulsing) { animate() }
-    }
-
-    private func animate() {
-        breathe = false
-        guard pulsing, !reduceMotion else { return }
-        withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { breathe = true }
     }
 }
 
