@@ -130,7 +130,7 @@ private struct StatusCard: View {
                 // Fades with the light's breath; its size stays put.
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
-                    .opacity(0.92 + 0.08 * breath)
+                    .opacity(0.8 + 0.2 * breath)
                 if let subtitle {
                     Text(subtitle)
                         .font(.system(size: 11.5))
