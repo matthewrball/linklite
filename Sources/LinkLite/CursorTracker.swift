@@ -21,6 +21,13 @@ final class CursorTracker {
     /// Largest image the dock cursor takes.
     private static let maxSide = 64
     private static let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    /// Polling backs up the event monitors, which macOS stops feeding while another process holds
+    /// the pointer (screenshot selection, ⇧⌘4/⇧⌘5). Without it the dock shows a frozen arrow and
+    /// no crosshair, since capture leaves the pointer out. Idle polling also catches shape changes
+    /// that arrive without movement; once it sees unreported movement it tracks at display rate.
+    private static let idleInterval: TimeInterval = 0.1
+    private static let trackingInterval: TimeInterval = 1.0 / 120
+    private static let trackingHold: CFTimeInterval = 0.5
 
     private let engine: EngineHandle
     private var targets: [Target] = []
@@ -30,6 +37,12 @@ final class CursorTracker {
     private var lastHotspot = (x: Int32(0), y: Int32(0))
     private var lastScale: CGFloat = 0
     private var lastShapeCheck = Date.distantPast
+    private var poll: Timer?
+    private var pollInterval: TimeInterval = 0
+    private var lastLocation = CGPoint(x: CGFloat.nan, y: CGFloat.nan)
+    private var lastMovement: CFTimeInterval = 0
+    /// The position the dock already holds; repeated polls send nothing.
+    private var lastSent: (head: Int32, x: Int32, y: Int32)?
 
     init(engine: EngineHandle) {
         self.engine = engine
@@ -43,6 +56,7 @@ final class CursorTracker {
             start()
         }
         lastShapeCheck = .distantPast
+        lastSent = nil
         update()
     }
 
@@ -62,27 +76,67 @@ final class CursorTracker {
         }) {
             monitors.append(local)
         }
+        schedulePoll(Self.idleInterval)
     }
 
     private func stop() {
         monitors.forEach(NSEvent.removeMonitor)
         monitors.removeAll()
+        poll?.invalidate()
+        poll = nil
+        pollInterval = 0
+    }
+
+    private func schedulePoll(_ interval: TimeInterval) {
+        poll?.invalidate()
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
+        }
+        timer.tolerance = interval * 0.2
+        // Common modes keep it running while this app's own menu or panel tracks the mouse.
+        RunLoop.main.add(timer, forMode: .common)
+        poll = timer
+        pollInterval = interval
+    }
+
+    private func tick() {
+        guard let location = CGEvent(source: nil)?.location else { return }
+        let now = CACurrentMediaTime()
+        if location != lastLocation {
+            lastMovement = now
+            if pollInterval != Self.trackingInterval { schedulePoll(Self.trackingInterval) }
+        } else if pollInterval == Self.trackingInterval, now - lastMovement > Self.trackingHold {
+            schedulePoll(Self.idleInterval)
+        }
+        update(at: location)
     }
 
     private func update() {
-        guard !targets.isEmpty, let location = CGEvent(source: nil)?.location else { return }
+        guard let location = CGEvent(source: nil)?.location else { return }
+        update(at: location)
+    }
+
+    private func update(at location: CGPoint) {
+        lastLocation = location
+        guard !targets.isEmpty else { return }
         guard let (target, bounds) = targets.lazy
             .map({ ($0, CGDisplayBounds($0.displayID)) })
             .first(where: { $0.1.contains(location) })
         else {
-            engine.moveCursor(head: -1, x: 0, y: 0)
+            send(head: -1, x: 0, y: 0)
             return
         }
         let scale = CGFloat(target.width) / bounds.width
         updateShape(scale: scale)
         let x = Int32(((location.x - bounds.minX) * scale).rounded(.down))
         let y = Int32(((location.y - bounds.minY) * scale).rounded(.down))
-        engine.moveCursor(head: Int32(target.head), x: x, y: y)
+        send(head: Int32(target.head), x: x, y: y)
+    }
+
+    private func send(head: Int32, x: Int32, y: Int32) {
+        if let lastSent, lastSent == (head, x, y) { return }
+        lastSent = (head, x, y)
+        engine.moveCursor(head: head, x: x, y: y)
     }
 
     /// Re-renders the system cursor at the dock's pixel scale when it may have changed shape,
