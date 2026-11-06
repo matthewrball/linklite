@@ -9,6 +9,15 @@
     <language>en</language>
     <!-- release.sh inserts new <item> elements directly below this line. -->
     <item xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+      <title>LinkLite 0.3.11</title>
+      <link>https://github.com/matthewrball/linklite/releases/tag/v0.3.11</link>
+      <pubDate>Fri, 06 Nov 2026 21:13:19 +0000</pubDate>
+      <sparkle:version>0.3.11</sparkle:version>
+      <sparkle:shortVersionString>0.3.11</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/matthewrball/linklite/releases/download/v0.3.11/LinkLite-0.3.11.dmg" type="application/octet-stream" sparkle:edSignature="xER6B8fybguHdx14zM16VkMvHr8kjp4YmKoxtIj9Ofi/QWgLwKHKNEC3k2aWT+0ySasqCgOxNKcoMa9avJLzDQ==" length="4258608" />
+    </item>
+    <item xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
       <title>LinkLite 0.3.10</title>
       <link>https://github.com/matthewrball/linklite/releases/tag/v0.3.10</link>
       <pubDate>Fri, 06 Nov 2026 19:47:05 +0000</pubDate>
