@@ -43,6 +43,12 @@ private let mint = Color(red: 0.18, green: 0.65, blue: 0.48)
 enum DisclosureMotion {
     static let duration = 0.14
     static let animation = Animation.timingCurve(0.22, 0.61, 0.36, 1, duration: duration)
+    /// Content appearing below other cards fades in and settles from 97% scale at its own top edge,
+    /// so it never slides over the cards above it. Leaving is a plain fade.
+    static let reveal = AnyTransition.asymmetric(
+        insertion: .opacity.combined(with: .scale(scale: 0.97, anchor: .top)),
+        removal: .opacity
+    )
 }
 
 struct PanelView: View {
@@ -56,15 +62,12 @@ struct PanelView: View {
             StatusCard(model: model)
             if !model.monitors.isEmpty {
                 VStack(spacing: 6) {
-                    ForEach(model.monitors) { MonitorCard(monitor: $0) }
+                    ForEach(model.monitors) { MonitorCard(monitor: $0).transition(DisclosureMotion.reveal) }
                 }
+                .transition(DisclosureMotion.reveal)
             }
             if model.isSettingsExpanded {
-                settings
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity),
-                        removal: .opacity
-                    ))
+                settings.transition(DisclosureMotion.reveal)
             }
             Divider().padding(.horizontal, 4).opacity(0.5)
             footer
@@ -85,10 +88,18 @@ struct PanelView: View {
         }
         .animation(disclosureAnimation, value: model.isSettingsExpanded)
         .tint(mint)
+        // Leaving cards keep their old place while the glass shrinks; keep them inside it.
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .glassPanel(cornerRadius: 24)
         // The window is transparent and shadowless; this shadow follows the rounded glass, and the
         // margin keeps it from being clipped. StatusPanelController offsets the window by the margin.
         .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
+        // Status and monitor changes arrive without a transaction. Animate them here, outside the
+        // glass, so the glass and its shadow resize on the same curve as the cards inside.
+        .animation(disclosureAnimation, value: model.status)
+        .animation(disclosureAnimation, value: model.message)
+        .animation(disclosureAnimation, value: model.monitors)
+        .animation(disclosureAnimation, value: model.loginNeedsApproval)
         .padding(Self.shadowMargin)
         .fixedSize()
         // The window grows to the final size at once and shrinks on the disclosure curve. Keep the
@@ -179,12 +190,15 @@ private struct StatusCard: View {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
                     .opacity(0.8 + 0.2 * breath)
+                    // Status changes reach the breath without animation, as the light's do.
+                    .animation(nil, value: model.status)
                 if let subtitle {
                     Text(subtitle)
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
+                        .transition(.opacity)
                 }
             }
             Spacer(minLength: 0)
@@ -192,6 +206,7 @@ private struct StatusCard: View {
                 Button("Allow", action: model.openScreenRecordingSettings)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
+                    .transition(.opacity)
             }
         }
         .padding(12)
@@ -269,6 +284,9 @@ private struct StatusOrb: View {
                 .scaleEffect(0.94 + 0.06 * breath)
                 .shadow(color: color.opacity(0.45 + 0.25 * breath), radius: 5)
         }
+        // The panel animates status changes, but the breath must keep taking them instantly so a
+        // repeat-forever breath starts and stops cleanly. The colour changes whenever pulsing does.
+        .animation(nil, value: color)
         .frame(width: 32, height: 32)
     }
 }
@@ -339,6 +357,7 @@ private struct SettingRow: View {
                     Text(subtitle)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                        .transition(.opacity)
                 }
             }
             Spacer(minLength: 8)

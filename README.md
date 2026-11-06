@@ -31,14 +31,14 @@
 </p>
 
 <p align="center">
-  <sub>74% less memory in the historical LinkLite 0.2.0 benchmark with two 4K monitors—not re-measured for v0.3.7. <a href="docs/BENCHMARK.md">Full benchmark, method, and CPU tradeoff →</a></sub>
+  <sub>74% less memory in the historical LinkLite 0.2.0 benchmark with two 4K monitors—not re-measured for later releases. <a href="docs/BENCHMARK.md">Full benchmark, method, and CPU tradeoff →</a></sub>
 </p>
 
 ---
 
 **LinkLite** is a native macOS menu-bar app that talks to DisplayLink USB docks directly. For each monitor on the dock it creates a macOS display, sends only the parts of the screen that change, and lets the dock draw your mouse pointer. Tested on a Humanscale M/Connect 2 driving two 4K monitors at 60 Hz.
 
-**Beta software.** v0.3.7 is publicly released; that does not establish 1.0 readiness. Its refactor still needs live-hardware validation of two-monitor rendering, repeated unplug/replug and sleep/wake, the receive-queue high-water mark, and an eight-hour memory run. See the [engineering gates](docs/DEVELOPMENT.md#engineering-hardening--2026-11-04-v037).
+**Beta software.** v0.3.10 is the latest public release; that does not establish 1.0 readiness. The v0.3.7 refactor still needs live-hardware validation of two-monitor rendering, repeated unplug/replug and sleep/wake, the receive-queue high-water mark, and an eight-hour memory run. See the [engineering gates](docs/DEVELOPMENT.md#engineering-hardening--2026-11-04-v037).
 
 ## Install
 
@@ -85,13 +85,13 @@ These are component checks, not new whole-app memory, display-frame-rate, or liv
 | CPU, live desktop | 55% | **2%** |
 | CPU, 60 fps motion | 338% | **20%** |
 
-The tradeoff: DisplayLink Manager compresses video on the GPU; LinkLite compresses it on the CPU. In this benchmark LinkLite used less memory and less whole-system GPU under motion, but more CPU. These results have not been extrapolated to v0.3.7. Method, per-run numbers, and raw data: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+The tradeoff: DisplayLink Manager compresses video on the GPU; LinkLite compresses it on the CPU. In this benchmark LinkLite used less memory and less whole-system GPU under motion, but more CPU. These results have not been extrapolated to v0.3.7 or later. Method, per-run numbers, and raw data: [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 ## Compatibility
 
 | | Status |
 |---|---|
-| Humanscale M/Connect 2 (DL-6xxx "Ridge") | Historically tested with two 4K60 monitors; v0.3.7 hardware requalification pending |
+| Humanscale M/Connect 2 (DL-6xxx "Ridge") | Historically tested with two 4K60 monitors; v0.3.7+ hardware requalification pending |
 | Dell D6000 and other DL-6xxx docks | Same protocol family; not individually certified |
 | DL-3xxx ("Ella") and DL-7400 ("Navarro") docks | Recognised by the protocol core; untested on macOS |
 | Macs | Apple silicon, macOS 14 or later; Intel not supported |

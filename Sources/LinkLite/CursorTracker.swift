@@ -43,9 +43,35 @@ final class CursorTracker {
     private var lastMovement: CFTimeInterval = 0
     /// The position the dock already holds; repeated polls send nothing.
     private var lastSent: (head: Int32, x: Int32, y: Int32)?
+    /// While the displays sleep nothing can be seen, so polling pauses until they wake.
+    private var screensAsleep = false
+    private var screenObservers: [NSObjectProtocol] = []
 
     init(engine: EngineHandle) {
         self.engine = engine
+        // The tracker lives as long as the app, like DisplayHost's observers; weak self keeps it safe anyway.
+        let center = NSWorkspace.shared.notificationCenter
+        for (name, asleep) in [(NSWorkspace.screensDidSleepNotification, true),
+                               (NSWorkspace.screensDidWakeNotification, false)] {
+            screenObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.setScreensAsleep(asleep) }
+            })
+        }
+    }
+
+    private func setScreensAsleep(_ asleep: Bool) {
+        guard asleep != screensAsleep else { return }
+        screensAsleep = asleep
+        if asleep {
+            poll?.invalidate()
+            poll = nil
+            pollInterval = 0
+        } else if !targets.isEmpty {
+            schedulePoll(Self.idleInterval)
+            lastShapeCheck = .distantPast
+            lastSent = nil
+            update()
+        }
     }
 
     func setTargets(_ targets: [Target]) {
@@ -76,7 +102,7 @@ final class CursorTracker {
         }) {
             monitors.append(local)
         }
-        schedulePoll(Self.idleInterval)
+        if !screensAsleep { schedulePoll(Self.idleInterval) }
     }
 
     private func stop() {

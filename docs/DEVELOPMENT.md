@@ -90,13 +90,19 @@ Protected-content playback is out of scope for the first implementation.
 
 ## Engineering hardening — 2026-11-04 (v0.3.7)
 
-These changes ship in the publicly released v0.3.7. LinkLite remains beta software; publication does not close the outstanding hardware gates or establish 1.0 readiness.
+These changes first shipped in v0.3.7; the latest public release is v0.3.10. LinkLite remains beta software; publication does not close the outstanding hardware gates or establish 1.0 readiness.
 
 The C ABI and wire encoding are unchanged. Capture damage is converted lazily at the ABI boundary, frame spans are checked before constructing Rust slices, and cursor/damage/candidate storage is reused. Cached encoded strips are borrowed during packing, and USB chunks are filled without an intermediate full-frame stream. Byte-equivalence regressions cover the affected encoding paths. See [BENCHMARK.md](BENCHMARK.md#hardware-free-optimization-checks--2026-11-04) for the limited measurements and their method.
 
 The native dependency is pinned in `vendor/libusb1-sys/` with documented upstream descriptor-parser backports. The USB receive queue now has a hard capacity and fails closed on overflow. Teardown waits for all submitted transfer callbacks before releasing memory; if libusb never completes cancellation, shutdown can wait indefinitely. Do not replace that wait with a timeout that frees live callback state.
 
 Hardware-free regressions and signed application builds pass. Two-monitor rendering, physical unplug/replug, sleep/wake, the receive-queue high-water mark, and an eight-hour memory run still need live-hardware validation for these changes. These checks do not supersede the acceptance criteria above.
+
+### Hardware cursor
+
+LinkLite draws the pointer with the dock's hardware cursor. `CursorTracker` combines global/local event monitors with adaptive timer polling (10 Hz idle, 120 Hz while the pointer moves without reported events) and skips unchanged positions. Polling is required because macOS delivers no pointer events to global monitors while screenshot selection holds the pointer; before v0.3.10 the dock pointer froze and the crosshair was missing during selection. Polling pauses while the displays sleep and resynchronises the dock pointer on wake.
+
+Known limitation: when an app hides the pointer, the dock still draws it, because macOS has no public API to read cursor visibility.
 
 ## Pre-1.0 qualification matrix
 
@@ -133,7 +139,7 @@ USB cancellation can hang indefinitely if libusb never returns all callbacks. Th
 - [ ] Complete owner-controlled signing-key recovery verification and the [release/recovery runbook](RELEASING.md).
 - [ ] Review compatibility/support wording against actual evidence; keep [privacy](../PRIVACY.md) and [private vulnerability reporting](../SECURITY.md) links available without adding telemetry.
 
-Public v0.3.7 release evidence is recorded in the [release runbook](RELEASING.md#current-evidence); it is not a substitute for these gates.
+Public release evidence (latest v0.3.10, plus historical v0.3.7 updater evidence) is recorded in the [release runbook](RELEASING.md#current-evidence); it is not a substitute for these gates.
 
 
 

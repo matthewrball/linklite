@@ -4,6 +4,13 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-11-06
+
+### Changed
+
+- LinkLite uses less power while displays sleep: it stops checking the pointer until they wake, then immediately puts the dock's pointer back where it belongs.
+- The menu-bar panel moves more calmly. Settings fade in below the status card instead of sliding under it, monitors and status details fade in and out while the panel resizes smoothly around them, and the panel's window is trimmed only after a collapse has finished. Reduce Motion still makes every change instant.
+
 ## [0.3.10] - 2026-11-06
 
 ### Fixed
@@ -121,7 +128,8 @@ First tester build, released as **DisplayLink Lite**.
 - A still screen stays clean, with no stale boxes or flickering patches: changed areas get a follow-up pass once the screen settles, and frames cycle through all three of the dock's buffers.
 - Heavy motion (for example App Exposé on two 4K monitors) does not reset the dock: video across both monitors is held to 100 MB/s.
 
-[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.10...HEAD
+[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.11...HEAD
+[0.3.11]: https://github.com/matthewrball/linklite/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/matthewrball/linklite/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/matthewrball/linklite/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/matthewrball/linklite/compare/v0.3.7...v0.3.8
