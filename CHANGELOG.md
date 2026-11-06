@@ -9,7 +9,7 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 ### Changed
 
 - LinkLite uses less power while displays sleep: it stops checking the pointer until they wake, then immediately puts the dock's pointer back where it belongs.
-- The menu-bar panel moves more calmly. Settings fade in below the status card instead of sliding under it, monitors and status details fade in and out while the panel resizes smoothly around them, and the panel's window is trimmed only after a collapse has finished. Reduce Motion still makes every change instant.
+- The menu-bar panel moves more calmly. Settings fade in below the status card instead of sliding under it, monitors and status details fade in and out while the panel resizes smoothly around them, and the panel's window is trimmed only after a collapse has finished. With Reduce Motion on, these changes happen instantly.
 
 ## [0.3.10] - 2026-11-06
 
