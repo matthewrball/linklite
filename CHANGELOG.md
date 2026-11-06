@@ -4,6 +4,11 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Changed
+
+- With Reduce Motion on, the menu-bar panel now opens and closes instantly instead of fading.
+- The Automatic updates rows fade in and out with the panel's resize when update support changes, instead of snapping.
+
 ## [0.3.11] - 2026-11-06
 
 ### Changed
