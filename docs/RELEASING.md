@@ -4,7 +4,11 @@ This is an operator procedure, not permission to publish or a claim of 1.0 readi
 
 ## Current evidence
 
-v0.3.7 is publicly released and the default appcast is live. Its source commit is `e5b9023b8b9b46eafd6c7c91c01807eaf3614f9a`; publication advanced main to `a2f29e3`. Do not replace that release's assets or reuse its version for new bytes.
+v0.3.10 is the latest public release and the default appcast is live. Its source commit is `c8d861d480cf9bc70bfbfc6271345540baefc5bc`; it fixed the dock pointer freezing and the missing crosshair during screenshot selection. Earlier 0.3.x releases: v0.3.9 (`e52a3822b40b9b14bb81549da04f884ca903669d`, header no longer drops on expand), v0.3.8 (`c390e17edb460662ffa798c78231b60855f29810`, smoother settings disclosure) and v0.3.7 (`e5b9023b8b9b46eafd6c7c91c01807eaf3614f9a`). Do not replace any released assets or reuse a released version for new bytes.
+
+v0.3.8, v0.3.9 and v0.3.10 were each published through a PR with the required "Build and test" CI, Developer ID signing, accepted notarization, stapling, Gatekeeper acceptance, a byte-identical re-download, Ed25519 verification, and then a separate feed PR. The owner's installed app was updated to v0.3.9 manually from the verified DMG (Gatekeeper accepted) and then to v0.3.10 through the updater; the installed version was observed, but the update flow itself was not watched.
+
+### v0.3.7 evidence (historical)
 
 Recorded release checks: 54 Rust/Swift tests, native ASan/UBSan checks, independent source/security and release-contract reviews, [GitHub CI](https://github.com/matthewrball/linklite/actions/runs/41985290639), Developer ID signing, accepted notarization, stapling, Gatekeeper assessment, and Ed25519 verification against the public key in the shipped app. The source archive was deterministic across system Python 3.9.6 and current Python; Rust rebuilt offline with an empty CARGO_HOME, and Swift rebuilt with the pinned cached Sparkle binary. These are packaging/source receipts, not live-dock qualification.
 
@@ -12,7 +16,7 @@ On 2026-11-05, the normal updater offered v0.3.7 to the installed v0.3.6 on macO
 
 The post-release packaging safeguards passed ten local release-contract regressions, including Apple's real requirement parser, and a real candidate build. Apple accepted app notarization `16b2821c-4652-42f7-9d75-5047cc0b906b` and DMG notarization `4b60cf2e-9e91-473f-8e4b-90578861805e`; stapling, Developer ID requirements and Ed25519 verification passed. The public feed and all four published v0.3.7 assets remained byte-identical after both a failed and successful candidate attempt. The candidate validation files were local only; no candidate feed or extra release was published.
 
-Pending: candidate-to-newer-version updates with a live dock, fresh-profile consent/login, the remaining supported-OS GUI/hardware matrix (including macOS 14), eight-hour memory and physical lifecycle tests, and owner signing-key backup/recovery verification. Repository protection is an external control: inspect GitHub's effective policy before each publication rather than inferring it from a green CI run.
+Pending: candidate-to-newer-version updates with a live dock, fresh-profile consent/login, the remaining supported-OS GUI/hardware matrix (including macOS 14), eight-hour memory and physical lifecycle tests, owner signing-key backup/recovery verification, settings disclosure with the system Reduce Motion setting on, and the hidden-pointer limitation (see [Hardware cursor](DEVELOPMENT.md#hardware-cursor)). Repository protection is an external control: inspect GitHub's effective policy before each publication rather than inferring it from a green CI run.
 
 ## Prepare a release
 
@@ -44,7 +48,7 @@ The example identity/profile/URL are placeholders to replace, not usable credent
 
 Upload the candidate DMG and matching checksum to the exact directory supplied in `--candidate-base-url`; place its corresponding-source archive there as well. Generate that archive under `dist/candidates/` using the contributor instructions, so candidate preparation does not overwrite public source artifacts. Only after verifying the hosted assets should the separate candidate `appcast.xml` be staged. This staging destination is chosen by the owner; no new update service is required.
 
-A GitHub prerelease alone does **not** isolate Sparkle updates. Isolation comes from the separate feed and enclosure URLs: never merge the candidate entry into root `appcast.xml`. Candidate mode leaves the app's `SUFeedURL` unchanged and adds no channel preference. Normal installations see entries explicitly published to the public feed, including the current v0.3.7 prerelease.
+A GitHub prerelease alone does **not** isolate Sparkle updates. Isolation comes from the separate feed and enclosure URLs: never merge the candidate entry into root `appcast.xml`. Candidate mode leaves the app's `SUFeedURL` unchanged and adds no channel preference. Normal installations see entries explicitly published to the public feed, including current prereleases.
 
 Use a disposable, owner-approved test installation/account and an explicitly candidate-configured test harness or build to exercise the candidate feed; do not redirect the user's normal installation or claim candidate mode does this automatically. Record how the test feed was selected. Test an older signed candidate updating to a strictly newer signed candidate and record offer, download, user-approved restart, installed build and dock recovery. If the isolated updater setup is unavailable, leave that exercise pending. Never downgrade a version or weaken signature checks to force an offer.
 
@@ -57,7 +61,7 @@ For the exact staged bytes:
 - Verify the appcast enclosure's Ed25519 signature over the exact downloaded DMG using the pinned Sparkle tools and the public key embedded in that app. Verify enclosure length, version/build, HTTPS asset URL, minimum OS and release notes. A SHA-256 file alone does not authenticate a release.
 - Inspect the downloaded source archive's `SOURCE-RELEASE.txt`, matching commit, dependencies and licenses; retain reproduction commands/results. The DMG, checksum, source and feed must all identify the same release.
 
-**Publish assets before the feed.** Stage the DMG, checksum and corresponding source on the release host, validate their final download URLs and bytes, and only then publish/merge the public appcast change through the required review/CI path. The appcast is the switch that exposes an update to existing users. Keep an evidence record with source SHA, feed commit, release URL, hashes, signing/notary receipts and updater result. Do not republish v0.3.7 to test this procedure.
+**Publish assets before the feed.** Stage the DMG, checksum and corresponding source on the release host, validate their final download URLs and bytes, and only then publish/merge the public appcast change through the required review/CI path. The appcast is the switch that exposes an update to existing users. Keep an evidence record with source SHA, feed commit, release URL, hashes, signing/notary receipts and updater result. Do not republish a released version to test this procedure.
 
 ### Post-publication verification
 

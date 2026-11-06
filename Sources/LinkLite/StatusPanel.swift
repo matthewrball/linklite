@@ -17,6 +17,8 @@ final class StatusPanelController {
     private(set) var isShown = false
     private var presentationID: UInt64 = 0
     private var resizeID: UInt64 = 0
+    /// The latest smaller frame of a collapse in progress; set while a shrink is scheduled.
+    private var pendingShrink: NSRect?
 
     init(model: PanelModel) {
         self.model = model
@@ -80,6 +82,7 @@ final class StatusPanelController {
     func hide() {
         guard isShown else { return }
         isShown = false
+        pendingShrink = nil
         presentationID &+= 1
         let closingPresentation = presentationID
         monitors.forEach(NSEvent.removeMonitor)
@@ -112,20 +115,28 @@ final class StatusPanelController {
         if hosting.view.frame.size != host {
             hosting.view.frame = NSRect(origin: .zero, size: host)
         }
-        resizeID &+= 1
-        guard panel.frame != frame else { return }
         if panel.isVisible, frame.height < panel.frame.height,
            !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            // Clip the window only after the glass has finished collapsing inside it. A newer
-            // size, such as a reversal back to expanded, cancels this.
+            // Clip the window only after the glass has finished collapsing inside it: a disclosure
+            // duration after the latest smaller size. Clipping late only leaves transparent space;
+            // clipping early would cut off glass that is still animating.
+            pendingShrink = frame
+            resizeID &+= 1
             let pending = resizeID
             DispatchQueue.main.asyncAfter(deadline: .now() + DisclosureMotion.duration) { [weak self] in
-                guard let self, self.isShown, self.resizeID == pending else { return }
+                guard let self, self.isShown, self.resizeID == pending, let frame = self.pendingShrink else { return }
+                self.pendingShrink = nil
+                // A reversal toggled just now reports its new size only on SwiftUI's next pass;
+                // don't clip content that has already started growing again.
+                guard self.hosting.sizeThatFits(in: .zero).height <= frame.height else { return }
                 self.panel.setFrame(frame, display: true)
             }
         } else {
             // Growing takes the final size at once; the extra area is transparent while the glass
-            // expands into it.
+            // expands into it. This, or a reversal back to the current size, cancels a pending shrink.
+            pendingShrink = nil
+            resizeID &+= 1
+            guard panel.frame != frame else { return }
             panel.setFrame(frame, display: true)
         }
     }
