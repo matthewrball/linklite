@@ -4,6 +4,12 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-11-06
+
+### Fixed
+
+- During screenshot selection (⇧⌘4, ⇧⌘5) the pointer on dock monitors no longer freezes, and the crosshair now appears. macOS stops delivering pointer events to other apps while it holds the pointer, so LinkLite now also polls the pointer and follows it at display rate whenever events go quiet. The same polling picks up pointer shape changes that happen without movement.
+
 ## [0.3.9] - 2026-11-05
 
 ### Fixed
@@ -115,7 +121,8 @@ First tester build, released as **DisplayLink Lite**.
 - A still screen stays clean, with no stale boxes or flickering patches: changed areas get a follow-up pass once the screen settles, and frames cycle through all three of the dock's buffers.
 - Heavy motion (for example App Exposé on two 4K monitors) does not reset the dock: video across both monitors is held to 100 MB/s.
 
-[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.9...HEAD
+[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.10...HEAD
+[0.3.10]: https://github.com/matthewrball/linklite/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/matthewrball/linklite/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/matthewrball/linklite/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/matthewrball/linklite/compare/v0.3.6...v0.3.7
