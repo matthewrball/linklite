@@ -100,6 +100,7 @@ struct PanelView: View {
         .animation(disclosureAnimation, value: model.message)
         .animation(disclosureAnimation, value: model.monitors)
         .animation(disclosureAnimation, value: model.loginNeedsApproval)
+        .animation(disclosureAnimation, value: model.updatesAvailable)
         .padding(Self.shadowMargin)
         .fixedSize()
         // The window grows to the final size at once and shrinks on the disclosure curve. Keep the
@@ -139,20 +140,23 @@ struct PanelView: View {
                 action: model.toggleOpenAtLogin
             )
             if model.updatesAvailable {
-                Divider().padding(.leading, 40).opacity(0.5)
-                SettingRow(
-                    symbol: "arrow.down.circle",
-                    title: "Automatic updates",
-                    subtitle: nil,
-                    isOn: model.automaticUpdates,
-                    action: model.toggleAutomaticUpdates
-                )
-                UpdateRibbonButton(action: model.checkForUpdates)
-                    .disabled(!model.canCheckForUpdates)
-                    .padding(.leading, 40)
-                    .padding(.trailing, 10)
-                    .padding(.top, 2)
-                    .padding(.bottom, 10)
+                VStack(spacing: 0) {
+                    Divider().padding(.leading, 40).opacity(0.5)
+                    SettingRow(
+                        symbol: "arrow.down.circle",
+                        title: "Automatic updates",
+                        subtitle: nil,
+                        isOn: model.automaticUpdates,
+                        action: model.toggleAutomaticUpdates
+                    )
+                    UpdateRibbonButton(action: model.checkForUpdates)
+                        .disabled(!model.canCheckForUpdates)
+                        .padding(.leading, 40)
+                        .padding(.trailing, 10)
+                        .padding(.top, 2)
+                        .padding(.bottom, 10)
+                }
+                .transition(DisclosureMotion.reveal)
             }
         }
         .padding(.vertical, 4)

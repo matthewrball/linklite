@@ -62,8 +62,10 @@ final class StatusPanelController {
         place(size: hosting.sizeThatFits(in: .zero))
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
+        // Reduce Motion: appear and disappear at once, like the disclosure inside.
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.16
+            context.duration = reduceMotion ? 0 : 0.16
             panel.animator().alphaValue = 1
         }
         button.highlight(true)
@@ -89,7 +91,7 @@ final class StatusPanelController {
         monitors = []
         anchor?.highlight(false)
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.12
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.12
             panel.animator().alphaValue = 0
         } completionHandler: { [weak self] in
             MainActor.assumeIsolated {
