@@ -91,10 +91,13 @@ final class DisplayHost {
     /// (SCStreamError -3815); until a new stream starts, the dock keeps showing the last frame.
     func resumeCapture() {
         guard !screenRecordingDenied else { return }
-        for (head, state) in heads where state.display != nil && state.capture == nil && state.startTask == nil {
+        for (head, state) in heads where state.display != nil && state.capture == nil {
+            // A start already in flight may fail if it began while the displays slept; its retry
+            // then waits 1 s instead of the long backoff accumulated during sleep.
+            heads[head]?.retryAttempt = 0
+            guard state.startTask == nil else { continue }
             heads[head]?.retryTask?.cancel()
             heads[head]?.retryTask = nil
-            heads[head]?.retryAttempt = 0
             log.info("Resuming capture for head \(head)")
             startCapture(head: head)
         }
@@ -242,6 +245,11 @@ final class DisplayHost {
 
     private func captureStopped(head: UInt8, token: UUID, error: Error) {
         guard heads[head]?.captureToken == token else { return }
+        // The stop can arrive before the start task stores the stream. Retire that attempt so a
+        // late success is discarded (and its dead stream stopped) instead of counting as running.
+        heads[head]?.captureToken = UUID()
+        heads[head]?.startTask?.cancel()
+        heads[head]?.startTask = nil
         heads[head]?.capture = nil
         recordCaptureFailure(head: head, error: error)
         scheduleCaptureRetry(head: head)
