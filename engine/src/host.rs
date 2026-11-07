@@ -154,6 +154,10 @@ struct Mailbox {
     all_changed: bool,
     /// Latest display-power request not yet acted on.
     power: Option<bool>,
+    /// The virtual display's gamma transfer table (R, G, B), applied while the engine copies
+    /// the surface out. Capture returns pre-gamma pixels, so the host hands the table over.
+    /// `None` is identity. Survives mode changes: it belongs to the display, not the mode.
+    gamma: Option<[[u8; 256]; 3]>,
 }
 
 /// A pointer image for the dock's hardware cursor: BGRA, top row first, tightly packed.
@@ -281,6 +285,9 @@ pub struct Shared {
     stop: AtomicBool,
     mailboxes: [Mutex<Mailbox>; MAX_CONNECTORS],
     cursor: Mutex<CursorBox>,
+    /// Each head's gamma table for the dock cursor, with a generation that changes with it. Kept
+    /// apart from the mailbox so the engine never waits on a capture in progress to read it.
+    cursor_gamma: [Mutex<(u64, Option<[[u8; 256]; 3]>)>; MAX_CONNECTORS],
     /// Signalled whenever a mailbox or the cursor changes, or stop is requested.
     signal: Mutex<u64>,
     wake: Condvar,
@@ -295,6 +302,7 @@ impl Shared {
             stop: AtomicBool::new(false),
             mailboxes: core::array::from_fn(|_| Mutex::new(Mailbox::default())),
             cursor: Mutex::new(CursorBox::default()),
+            cursor_gamma: core::array::from_fn(|_| Mutex::new((0, None))),
             signal: Mutex::new(0),
             wake: Condvar::new(),
             workers: std::thread::available_parallelism().map_or(1, |n| n.get()),
@@ -478,15 +486,45 @@ impl Shared {
         }
     }
 
+    /// Set the head's gamma table (`None` or an identity table clears it). A different table
+    /// repaints the whole surface on the next visit, even if capture sends nothing new.
+    pub fn set_gamma(&self, head: usize, lut: Option<[[u8; 256]; 3]>) {
+        let Some(slot) = self.mailboxes.get(head) else { return };
+        let is_identity =
+            |lut: &[[u8; 256]; 3]| lut.iter().all(|ch| ch.iter().enumerate().all(|(i, &v)| usize::from(v) == i));
+        let lut = lut.filter(|lut| !is_identity(lut));
+        let mut mailbox = slot.lock().unwrap();
+        if mailbox.gamma == lut {
+            return;
+        }
+        mailbox.gamma = lut;
+        {
+            // The dock draws the pointer itself, so it gets the same table (see sync_cursor).
+            let mut cursor_gamma = self.cursor_gamma[head].lock().unwrap();
+            *cursor_gamma = (cursor_gamma.0 + 1, lut);
+        }
+        self.notify();
+        if mailbox.accepting.is_none() || mailbox.surface.is_empty() {
+            return;
+        }
+        mailbox.all_changed = true;
+        self.perf.heads[head].frame_ready.store(true, Ordering::Relaxed);
+        drop(mailbox);
+        self.notify();
+    }
+
     fn open(&self, head: usize, accepting: Accepting) {
         let mut mailbox = self.mailboxes[head].lock().unwrap();
-        *mailbox = Mailbox { accepting: Some(accepting), ..Mailbox::default() };
+        let gamma = mailbox.gamma;
+        *mailbox = Mailbox { accepting: Some(accepting), gamma, ..Mailbox::default() };
         self.perf.heads[head].frame_ready.store(false, Ordering::Relaxed);
         self.perf.heads[head].attached.store(true, Ordering::Relaxed);
     }
 
     fn close(&self, head: usize) {
-        *self.mailboxes[head].lock().unwrap() = Mailbox::default();
+        let mut mailbox = self.mailboxes[head].lock().unwrap();
+        let gamma = mailbox.gamma;
+        *mailbox = Mailbox { gamma, ..Mailbox::default() };
         self.perf.heads[head].frame_ready.store(false, Ordering::Relaxed);
         self.perf.heads[head].attached.store(false, Ordering::Relaxed);
     }
@@ -505,7 +543,13 @@ impl Shared {
         let (tiles_x, _) = a.tiles();
         if mailbox.all_changed || shadow.len() != mailbox.surface.len() {
             shadow.clear();
-            shadow.extend_from_slice(&mailbox.surface);
+            match &mailbox.gamma {
+                None => shadow.extend_from_slice(&mailbox.surface),
+                Some(lut) => {
+                    shadow.resize(mailbox.surface.len(), 0);
+                    apply_gamma(shadow, &mailbox.surface, lut);
+                }
+            }
             mailbox.changed.fill(false);
             mailbox.changed_count = 0;
             mailbox.all_changed = false;
@@ -530,7 +574,10 @@ impl Shared {
                 let (y0, y1) = (ty * a.strip_h, (ty + 1) * a.strip_h);
                 for y in y0..y1 {
                     let span = y * row + x0 * 3..y * row + x1 * 3;
-                    shadow[span.clone()].copy_from_slice(&mailbox.surface[span]);
+                    match &mailbox.gamma {
+                        None => shadow[span.clone()].copy_from_slice(&mailbox.surface[span]),
+                        Some(lut) => apply_gamma(&mut shadow[span.clone()], &mailbox.surface[span], lut),
+                    }
                 }
                 rects.push((x0, y0, x1, y1));
             }
@@ -592,6 +639,50 @@ impl Shared {
     }
 }
 
+/// A premultiplied BGRA cursor image through a per-channel gamma table: each colour is
+/// un-premultiplied, mapped, and premultiplied again, so edges keep their coverage.
+fn gamma_premultiplied_bgra(bgra: &[u8], lut: &[[u8; 256]; 3]) -> Vec<u8> {
+    let mut out = bgra.to_vec();
+    for px in out.chunks_exact_mut(4) {
+        let a = u32::from(px[3]);
+        if a == 0 {
+            continue;
+        }
+        // BGRA in memory: blue is channel 2 of the table, red channel 0.
+        for (byte, channel) in [(0usize, 2usize), (1, 1), (2, 0)] {
+            let straight = ((u32::from(px[byte]) * 255 + a / 2) / a).min(255) as usize;
+            px[byte] = ((u32::from(lut[channel][straight]) * a + 127) / 255) as u8;
+        }
+    }
+    out
+}
+
+/// Copy packed RGB888 `src` into `dst` through a per-channel gamma table. Large copies (a whole
+/// 4K surface is about 25 MB, measured at 8.6 ms on one core) are split across cores, since this
+/// runs on the engine thread while it holds the head's mailbox lock.
+fn apply_gamma(dst: &mut [u8], src: &[u8], lut: &[[u8; 256]; 3]) {
+    const PARALLEL_BYTES: usize = 1 << 20;
+    let serial = |dst: &mut [u8], src: &[u8]| {
+        for (d, s) in dst.chunks_exact_mut(3).zip(src.chunks_exact(3)) {
+            d[0] = lut[0][usize::from(s[0])];
+            d[1] = lut[1][usize::from(s[1])];
+            d[2] = lut[2][usize::from(s[2])];
+        }
+    };
+    let workers = std::thread::available_parallelism().map_or(1, |n| n.get()).min(8);
+    if dst.len() < PARALLEL_BYTES || workers < 2 {
+        serial(dst, src);
+        return;
+    }
+    // Whole pixels per chunk, so no pixel straddles two workers.
+    let chunk = dst.len().div_ceil(workers).div_ceil(3) * 3;
+    std::thread::scope(|scope| {
+        for (d, s) in dst.chunks_mut(chunk).zip(src.chunks(chunk)) {
+            scope.spawn(move || serial(d, s));
+        }
+    });
+}
+
 /// Hash of one strip's BGRA pixels (`cols` x `rows` at `x0, y0`). Change detection only: two
 /// different strips agreeing is vanishingly unlikely, and the same pixels always agree.
 fn bgra_strip_hash(bgra: &[u8], stride: usize, x0: usize, y0: usize, cols: usize, rows: usize) -> u64 {
@@ -632,6 +723,8 @@ struct Output {
     cursor_shape_gen: u64,
     /// Whether the dock is currently showing the pointer on this head.
     cursor_visible: bool,
+    /// Generation of the gamma table the dock cursor image was uploaded through.
+    cursor_gamma_gen: u64,
     /// When the last new frame was presented.
     last_change: Instant,
     /// Whether the settle pass has run since the last new frame.
@@ -993,6 +1086,7 @@ fn attach(
         presence_grace_until: Instant::now() + PRESENCE_GRACE,
         cursor_shape_gen: 0,
         cursor_visible: false,
+        cursor_gamma_gen: 0,
         last_change: Instant::now(),
         settled: true,
         next_repaint: Instant::now(),
@@ -1020,9 +1114,17 @@ fn sync_cursor(
     let mut reposition = position_gen != *position_applied;
     for (head, slot) in outputs.iter_mut().enumerate() {
         let Some(output) = slot.as_mut().filter(|output| output.lit) else { continue };
-        if output.cursor_shape_gen != shape_gen {
-            session.set_cursor(head as u8, shape.width, shape.height, &shape.bgra)?;
+        let (gamma_gen, gamma) = *shared.cursor_gamma[head].lock().unwrap();
+        if output.cursor_shape_gen != shape_gen || output.cursor_gamma_gen != gamma_gen {
+            match &gamma {
+                None => session.set_cursor(head as u8, shape.width, shape.height, &shape.bgra)?,
+                Some(lut) => {
+                    let tinted = gamma_premultiplied_bgra(&shape.bgra, lut);
+                    session.set_cursor(head as u8, shape.width, shape.height, &tinted)?;
+                }
+            }
             output.cursor_shape_gen = shape_gen;
+            output.cursor_gamma_gen = gamma_gen;
             // A fresh image is shown wherever the dock last had the pointer; place it again.
             output.cursor_visible = true;
             reposition = true;
@@ -1219,6 +1321,86 @@ mod tests {
         assert_eq!(shadow, vec![3; 24]);
     }
 
+    /// A table that sends `v` to `v / 2` (red), `255 - v` (green), and leaves blue alone.
+    fn test_lut() -> [[u8; 256]; 3] {
+        core::array::from_fn(|c| core::array::from_fn(|i| match c { 0 => i as u8 / 2, 1 => 255 - i as u8, _ => i as u8 }))
+    }
+
+    #[test]
+    fn gamma_table_applies_to_copied_pixels() {
+        let shared = Shared::new();
+        shared.open(0, Accepting { strip_w: 2, ..accepting(4, 2, 4, 2) });
+        shared.set_gamma(0, Some(test_lut()));
+        let mut shadow = Vec::new();
+        shared.submit_frame(0, &[100; 32], 16, 4, 2, [(0, 0, 4, 2)]);
+        assert_eq!(shared.take_frame(0, &mut shadow), Some(None));
+        assert_eq!(shadow, [50, 155, 100].repeat(8));
+        // Partial copies go through the table too, and only the changed strip moves.
+        let mut bgra = [100; 32];
+        bgra[..8].fill(10);
+        shared.submit_frame(0, &bgra, 16, 4, 2, [(0, 0, 1, 1)]);
+        assert_eq!(shared.take_frame(0, &mut shadow), Some(Some(vec![(0, 0, 2, 1)])));
+        assert_eq!(shadow, [[5, 245, 10].repeat(2), [50, 155, 100].repeat(6)].concat());
+    }
+
+    #[test]
+    fn changing_gamma_repaints_the_whole_surface_without_a_new_frame() {
+        let shared = Shared::new();
+        shared.open(0, Accepting { strip_w: 2, ..accepting(4, 2, 4, 2) });
+        let mut shadow = Vec::new();
+        shared.submit_frame(0, &[100; 32], 16, 4, 2, [(0, 0, 4, 2)]);
+        assert_eq!(shared.take_frame(0, &mut shadow), Some(None));
+        assert!(shared.take_frame(0, &mut shadow).is_none());
+        shared.set_gamma(0, Some(test_lut()));
+        assert!(shared.perf.heads[0].frame_ready.load(Ordering::Relaxed));
+        assert_eq!(shared.take_frame(0, &mut shadow), Some(None));
+        assert_eq!(shadow, [50, 155, 100].repeat(8));
+        // The same table again changes nothing; clearing it repaints untinted.
+        shared.set_gamma(0, Some(test_lut()));
+        assert!(shared.take_frame(0, &mut shadow).is_none());
+        shared.set_gamma(0, None);
+        assert_eq!(shared.take_frame(0, &mut shadow), Some(None));
+        assert_eq!(shadow, vec![100; 24]);
+    }
+
+    #[test]
+    fn cursor_image_goes_through_the_gamma_table_keeping_alpha() {
+        // Red halved, green inverted, blue zeroed.
+        let lut: [[u8; 256]; 3] =
+            core::array::from_fn(|c| core::array::from_fn(|i| match c { 0 => i as u8 / 2, 1 => 255 - i as u8, _ => 0 }));
+        // Opaque white, half-transparent white (premultiplied 128), fully transparent.
+        let bgra = [255, 255, 255, 255, 128, 128, 128, 128, 0, 0, 0, 0];
+        let out = gamma_premultiplied_bgra(&bgra, &lut);
+        assert_eq!(&out[0..4], &[0, 0, 127, 255]);
+        assert_eq!(&out[4..8], &[0, 0, 64, 128]);
+        assert_eq!(&out[8..12], &[0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn changing_gamma_bumps_the_cursor_table_generation() {
+        let shared = Shared::new();
+        shared.open(0, Accepting { strip_w: 2, ..accepting(4, 2, 4, 2) });
+        shared.set_gamma(0, Some(test_lut()));
+        let first = *shared.cursor_gamma[0].lock().unwrap();
+        assert_eq!(first, (1, Some(test_lut())));
+        shared.set_gamma(0, Some(test_lut()));
+        assert_eq!(shared.cursor_gamma[0].lock().unwrap().0, 1, "same table: no re-upload");
+        shared.set_gamma(0, None);
+        assert_eq!(*shared.cursor_gamma[0].lock().unwrap(), (2, None));
+    }
+
+    #[test]
+    fn identity_gamma_is_no_table() {
+        let shared = Shared::new();
+        shared.open(0, Accepting { strip_w: 2, ..accepting(4, 2, 4, 2) });
+        let mut shadow = Vec::new();
+        shared.submit_frame(0, &[100; 32], 16, 4, 2, [(0, 0, 4, 2)]);
+        assert_eq!(shared.take_frame(0, &mut shadow), Some(None));
+        shared.set_gamma(0, Some(core::array::from_fn(|_| core::array::from_fn(|i| i as u8))));
+        assert!(shared.mailboxes[0].lock().unwrap().gamma.is_none());
+        assert!(shared.take_frame(0, &mut shadow).is_none());
+    }
+
     #[test]
     fn stats_count_accepted_frames_per_attached_head_and_reset_when_taken() {
         let shared = Shared::new();
@@ -1328,3 +1510,4 @@ mod tests {
         assert_eq!(budget.tokens, VIDEO_BURST_BYTES);
     }
 }
+

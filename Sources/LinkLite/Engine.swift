@@ -162,6 +162,21 @@ final class EngineHandle: @unchecked Sendable {
         dll_engine_set_display_power(engine, head, on)
     }
 
+    /// Sets a head's gamma table: 768 bytes, 256 each for R, G, B. nil clears it.
+    func setGamma(head: UInt8, lut: [UInt8]?) {
+        pthread_rwlock_rdlock(lock)
+        defer { pthread_rwlock_unlock(lock) }
+        guard let engine else { return }
+        guard let lut, lut.count == 768 else {
+            dll_engine_set_gamma(engine, head, nil, nil, nil)
+            return
+        }
+        lut.withUnsafeBufferPointer {
+            let base = $0.baseAddress!
+            dll_engine_set_gamma(engine, head, base, base + 256, base + 512)
+        }
+    }
+
     /// Sets the dock cursor image: premultiplied BGRA, `width * height * 4` bytes.
     func setCursor(bgra: [UInt8], width: UInt32, height: UInt32, hotX: Int32, hotY: Int32) {
         pthread_rwlock_rdlock(lock)

@@ -82,6 +82,12 @@ void dll_engine_submit_frame(DLLEngine *engine, uint8_t head, const uint8_t *bgr
 /// Power a head's monitor down (false) or back up (true), e.g. on display sleep and wake.
 void dll_engine_set_display_power(DLLEngine *engine, uint8_t head, bool on);
 
+/// Set a head's gamma transfer table: r, g and b each point to 256 bytes mapping a captured
+/// channel value to the value sent to the monitor. All three NULL (or an identity table) clears it.
+/// A different table repaints the head's whole picture, even with no new frame.
+void dll_engine_set_gamma(DLLEngine *engine, uint8_t head, const uint8_t *r, const uint8_t *g,
+                          const uint8_t *b);
+
 /// Set the pointer image the dock draws: BGRA8888 (premultiplied), top row first, tightly packed,
 /// at most 64x64. hot_x/hot_y is the hotspot within the image, in image pixels.
 void dll_engine_set_cursor(DLLEngine *engine, const uint8_t *bgra, uint32_t width, uint32_t height,

@@ -104,6 +104,10 @@ LinkLite draws the pointer with the dock's hardware cursor. `CursorTracker` comb
 
 Known limitation: when an app hides the pointer, the dock still draws it, because macOS has no public API to read cursor visibility.
 
+### Gamma tables
+
+ScreenCaptureKit returns pre-gamma pixels, so a display's transfer table (`CGSetDisplayTransferByTable`, used by gamma-based warm-tint and Night Shift-style utilities) never reaches captured frames; a real GPU output would apply it. LinkLite polls each virtual display's table every 0.5 s (and on attach, capture restart and screen-parameter changes), converts it to 3x256 bytes, and hands changes to the engine with `dll_engine_set_gamma`. The engine applies it while copying changed areas into the frame it encodes (split across cores for large copies: a full 4K frame measured 1.4 ms, 4.8 ms on one core) and repaints the whole picture when the table changes; an identity table costs nothing. The dock's hardware cursor image is re-uploaded through the same table (un-premultiplied, mapped, re-premultiplied) whenever the table or the pointer shape changes. SkyLight accessibility colour matrices and other private display filters are not visible to LinkLite and are not applied.
+
 ## Performance logging
 
 `defaults write com.ball.linklite PerformanceLogging -bool true` (read at launch; default off) makes LinkLite log one line per attached head each second under subsystem `com.ball.linklite`, category `perf`: captured fps, presents/s, budget-skipped/s, coarse/s (presents whose change was too scattered for exact damage rectangles and went as a coarse superset), MB/s, and average milliseconds per present for take, plan, encode, pack, USB submit and status poll, plus per-frame capture conversion time and the engine's loop rate and budget-wait time. Stream it with `log stream --predicate 'subsystem == "com.ball.linklite" AND category == "perf"' --level info`. The counters come from `dll_engine_stats` and are always maintained as relaxed atomics; the switch only controls the once-a-second read and log.

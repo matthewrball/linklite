@@ -4,6 +4,12 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+## [0.3.14] - 2026-11-06
+
+### Fixed
+
+- Warm-tint and gamma apps (such as Abendrot and other Night Shift-style utilities) now tint the dock monitors and their mouse pointer too. They change the display's colour table, which LinkLite previously ignored; it now applies each monitor's table itself.
+
 ## [0.3.13] - 2026-11-06
 
 ### Changed
@@ -147,7 +153,8 @@ First tester build, released as **DisplayLink Lite**.
 - A still screen stays clean, with no stale boxes or flickering patches: changed areas get a follow-up pass once the screen settles, and frames cycle through all three of the dock's buffers.
 - Heavy motion (for example App Exposé on two 4K monitors) does not reset the dock: video across both monitors is held to 100 MB/s.
 
-[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.13...HEAD
+[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.14...HEAD
+[0.3.14]: https://github.com/matthewrball/linklite/compare/v0.3.13...v0.3.14
 [0.3.13]: https://github.com/matthewrball/linklite/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/matthewrball/linklite/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/matthewrball/linklite/compare/v0.3.10...v0.3.11
