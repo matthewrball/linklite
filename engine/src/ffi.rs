@@ -165,6 +165,21 @@ pub unsafe extern "C" fn dll_engine_set_display_power(engine: *mut DLLEngine, he
     }
 }
 
+/// # Safety
+/// `engine` must come from `dll_engine_start` and not yet be stopped; `r`, `g` and `b` must
+/// each be NULL or point to 256 readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn dll_engine_set_gamma(engine: *mut DLLEngine, head: u8, r: *const u8, g: *const u8, b: *const u8) {
+    let Some(engine) = (unsafe { engine.as_ref() }) else { return };
+    let lut = if r.is_null() || g.is_null() || b.is_null() {
+        None
+    } else {
+        let read = |p: *const u8| unsafe { *p.cast::<[u8; 256]>() };
+        Some([read(r), read(g), read(b)])
+    };
+    let _ = catch_unwind(AssertUnwindSafe(|| engine.shared.set_gamma(usize::from(head), lut)));
+}
+
 /// Largest pointer image the dock's hardware cursor takes.
 const CURSOR_MAX: u32 = 64;
 

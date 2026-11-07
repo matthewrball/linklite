@@ -25,6 +25,8 @@ final class DisplayHost {
         /// A scheduled restart after the stream stopped or failed to start, and how many in a row.
         var retryTask: Task<Void, Never>?
         var retryAttempt = 0
+        /// The gamma table last sent to the engine (R, G, B, 256 bytes each); nil sends again.
+        var sentGamma: [UInt8]?
     }
 
     private(set) var engineState: DLLState?
@@ -42,6 +44,7 @@ final class DisplayHost {
     /// second (category "perf"); read at start.
     private static let performanceLoggingKey = "PerformanceLogging"
     private var perfTimer: Timer?
+    private var gammaTimer: Timer?
     private var perfIntervalStart = ContinuousClock.now
 
     /// A detached head's virtual display, kept briefly for a reconnect.
@@ -68,7 +71,10 @@ final class DisplayHost {
         displayReconfigured = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateCursorTargets() }
+            MainActor.assumeIsolated {
+                self?.updateCursorTargets()
+                self?.pollGamma()
+            }
         }
         if UserDefaults.standard.bool(forKey: Self.performanceLoggingKey) {
             startPerformanceLogging()
@@ -80,6 +86,8 @@ final class DisplayHost {
     func stop() {
         perfTimer?.invalidate()
         perfTimer = nil
+        gammaTimer?.invalidate()
+        gammaTimer = nil
         engine.stop()
     }
 
@@ -184,6 +192,7 @@ final class DisplayHost {
             engineMessage = message
         }
         updateCursorTargets()
+        pollGamma()
         onChange?()
     }
 
@@ -194,6 +203,57 @@ final class DisplayHost {
             return CursorTracker.Target(head: head.monitor.head, displayID: display.displayID,
                                         width: head.monitor.width, height: head.monitor.height)
         })
+    }
+
+    /// Hands each virtual display's gamma transfer table to the engine. ScreenCaptureKit returns
+    /// pre-gamma pixels, so tint apps that set the table (CGSetDisplayTransferByTable) would
+    /// otherwise not reach the dock. Polls every 0.5 s while any head has a virtual display.
+    private func pollGamma() {
+        let active = heads.values.contains { $0.display != nil }
+        if active, gammaTimer == nil {
+            gammaTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.pollGamma() }
+            }
+        } else if !active {
+            gammaTimer?.invalidate()
+            gammaTimer = nil
+            return
+        }
+        for (head, state) in heads {
+            guard let display = state.display, let lut = Self.gammaTable(of: display.displayID),
+                  lut != state.sentGamma else { continue }
+            heads[head]?.sentGamma = lut
+            engine.setGamma(head: head, lut: lut)
+        }
+    }
+
+    /// The display's transfer table as 3 x 256 bytes (R, G, B), or nil if it cannot be read.
+    private static func gammaTable(of displayID: CGDirectDisplayID) -> [UInt8]? {
+        let capacity: UInt32 = 256
+        var red = [CGGammaValue](repeating: 0, count: Int(capacity))
+        var green = red, blue = red
+        var count: UInt32 = 0
+        guard CGGetDisplayTransferByTable(displayID, capacity, &red, &green, &blue, &count) == .success,
+              count > 0 else { return nil }
+        let n = Int(min(count, capacity))
+        var lut = [UInt8](repeating: 0, count: 768)
+        for (channel, table) in [red, green, blue].enumerated() {
+            for i in 0..<256 {
+                // Resample to 256 entries by linear interpolation when the table has another size.
+                let value: Float
+                if n == 256 {
+                    value = table[i]
+                } else {
+                    let position = Float(i) * Float(n - 1) / 255
+                    let lower = Int(position)
+                    let upper = min(lower + 1, n - 1)
+                    let fraction = position - Float(lower)
+                    value = table[lower] + (table[upper] - table[lower]) * fraction
+                }
+                lut[channel * 256 + i] = UInt8(max(0, min(255, (value * 255).rounded())))
+            }
+        }
+        return lut
     }
 
     private func attach(_ monitor: MonitorInfo, rebuiltAfterTermination: Bool = false) {
@@ -277,6 +337,8 @@ final class DisplayHost {
         let engine = self.engine
         state.captureToken = token
         state.problem = nil
+        // A restarted capture may follow a new engine mailbox; send the gamma table again.
+        state.sentGamma = nil
         let onStop: @Sendable (Error) -> Void = { [weak self] error in
             Task { @MainActor in self?.captureStopped(head: head, token: token, error: error) }
         }
@@ -306,6 +368,7 @@ final class DisplayHost {
             self?.onChange?()
         }
         heads[head] = state
+        pollGamma()
     }
 
     private func captureStopped(head: UInt8, token: UUID, error: Error) {
