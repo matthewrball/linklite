@@ -90,7 +90,7 @@ Protected-content playback is out of scope for the first implementation.
 
 ## Engineering hardening — 2026-11-04 (v0.3.7)
 
-These changes first shipped in v0.3.7; the latest public release is v0.3.11. LinkLite remains beta software; publication does not close the outstanding hardware gates or establish 1.0 readiness.
+These changes first shipped in v0.3.7; the latest public release is v0.3.13. LinkLite remains beta software; publication does not close the outstanding hardware gates or establish 1.0 readiness.
 
 The C ABI and wire encoding are unchanged. Capture damage is converted lazily at the ABI boundary, frame spans are checked before constructing Rust slices, and cursor/damage/candidate storage is reused. Cached encoded strips are borrowed during packing, and USB chunks are filled without an intermediate full-frame stream. Byte-equivalence regressions cover the affected encoding paths. See [BENCHMARK.md](BENCHMARK.md#hardware-free-optimization-checks--2026-11-04) for the limited measurements and their method.
 
@@ -143,7 +143,7 @@ USB cancellation can hang indefinitely if libusb never returns all callbacks. Th
 - [ ] Complete owner-controlled signing-key recovery verification and the [release/recovery runbook](RELEASING.md).
 - [ ] Review compatibility/support wording against actual evidence; keep [privacy](../PRIVACY.md) and [private vulnerability reporting](../SECURITY.md) links available without adding telemetry.
 
-Public release evidence (latest v0.3.11, plus historical v0.3.7 updater evidence) is recorded in the [release runbook](RELEASING.md#current-evidence); it is not a substitute for these gates.
+Public release evidence (latest v0.3.13, plus historical v0.3.7 updater evidence) is recorded in the [release runbook](RELEASING.md#current-evidence); it is not a substitute for these gates.
 
 
 
