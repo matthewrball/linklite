@@ -104,6 +104,10 @@ LinkLite draws the pointer with the dock's hardware cursor. `CursorTracker` comb
 
 Known limitation: when an app hides the pointer, the dock still draws it, because macOS has no public API to read cursor visibility.
 
+## Performance logging
+
+`defaults write com.ball.linklite PerformanceLogging -bool true` (read at launch; default off) makes LinkLite log one line per attached head each second under subsystem `com.ball.linklite`, category `perf`: captured fps, presents/s, budget-skipped/s, coarse/s (presents whose change was too scattered for exact damage rectangles and went as a coarse superset), MB/s, and average milliseconds per present for take, plan, encode, pack, USB submit and status poll, plus per-frame capture conversion time and the engine's loop rate and budget-wait time. Stream it with `log stream --predicate 'subsystem == "com.ball.linklite" AND category == "perf"' --level info`. The counters come from `dll_engine_stats` and are always maintained as relaxed atomics; the switch only controls the once-a-second read and log.
+
 ## Pre-1.0 qualification matrix
 
 The full gates below remain **pending for the release build** as of 2026-11-05. The latest hardware probe found no DisplayLink USB device. An existing-profile v0.3.6 → v0.3.7 GUI update and settings expansion/collapse passed on macOS 26.6 with login/update choices and the signing identity preserved; this does not close the fresh-profile, attached-display or other-OS gates. Historical working-desktop observations above are not repeated-cycle qualification. Run on a spare dock or in an owner-approved maintenance window, with saved work and a usable built-in display. Keep DisplayLink Manager installed but quit, and disable neither security protections nor consent checks to obtain a pass.

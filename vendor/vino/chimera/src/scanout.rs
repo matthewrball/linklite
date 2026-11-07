@@ -37,8 +37,8 @@ pub enum Plan {
     Idle,
 }
 
-/// Cap on the number of damage rectangles handed to the codec before giving up on describing the
-/// change compactly and sending the whole surface. The driver uses the same bound.
+/// Cap on the number of damage rectangles handed to the codec. Change too scattered to describe
+/// exactly within it is sent as a coarser superset (local displaylink-lite patch).
 const MAX_RECTS: usize = 128;
 
 /// One frame's worth of EP08 records, and how many times to present it.
@@ -71,6 +71,9 @@ pub struct HeadScanout {
     /// once the surface goes still they are sent to every dock buffer again, so a transmission the
     /// dock missed or put in the wrong buffer while things were moving cannot leave a stale box.
     touched: Vec<bool>,
+    /// Whether the last plan was the coarse superset for change too scattered for [`MAX_RECTS`].
+    /// Local displaylink-lite patch, for performance counters.
+    last_plan_coarse: bool,
 }
 
 impl HeadScanout {
@@ -86,6 +89,7 @@ impl HeadScanout {
             bodies: Vec::new(),
             body_hashes: Vec::new(),
             touched: Vec::new(),
+            last_plan_coarse: false,
         }
     }
 
@@ -95,6 +99,12 @@ impl HeadScanout {
     /// anything else that leaves what the dock holds unknown.
     pub fn owe_keyframe(&mut self) {
         self.keyframe_owed = true;
+    }
+
+    /// Whether the last [`HeadScanout::plan_dirty`] fell back to a coarse superset because the
+    /// change was too scattered for [`MAX_RECTS`] exact rectangles. Local displaylink-lite patch.
+    pub fn last_plan_coarse(&self) -> bool {
+        self.last_plan_coarse
     }
 
     /// Whether some strip still owes a transmission.
@@ -174,12 +184,15 @@ impl HeadScanout {
                 self.touched[i] = true;
             }
         }
-        let rects = owed_rects(&self.debt, tiles_x, tiles_y, strip_w, strip_h);
-        match rects {
-            None => Plan::Keyframe,
-            Some(rects) if rects.is_empty() => Plan::Idle,
-            Some(rects) => Plan::Damage(rects),
-        }
+        // Change too scattered to list exactly (App Exposé, a desktop swipe) is sent as a coarse
+        // superset once, like any delta, rather than as a keyframe presented to every dock buffer
+        // back to back: the retransmit debt still carries each changed strip to every buffer, and a
+        // superset only resends strips the dock already holds (local displaylink-lite patch).
+        let exact = owed_rects(&self.debt, tiles_x, tiles_y, strip_w, strip_h);
+        self.last_plan_coarse = exact.is_none();
+        let rects =
+            exact.unwrap_or_else(|| coarse_owed_rects(&self.debt, tiles_x, tiles_y, strip_w, strip_h));
+        if rects.is_empty() { Plan::Idle } else { Plan::Damage(rects) }
     }
 
     /// Encode the strips `plan` selects into EP08 records, reusing bodies that are still current.
@@ -375,7 +388,7 @@ fn par_for_each_mut<T: Send>(items: &mut [T], f: impl Fn(usize, &mut T) + Sync) 
 /// Runs of owing strips within one band become one rectangle, and a rectangle directly above an
 /// identical span is grown downwards rather than added -- the same merge the driver does, because
 /// each rectangle costs the codec an overlap test per strip. `None` means the change is too
-/// scattered to describe within [`MAX_RECTS`], and the caller should send a keyframe.
+/// scattered to describe within [`MAX_RECTS`]; see [`coarse_owed_rects`].
 fn owed_rects(
     debt: &[u8],
     tiles_x: usize,
@@ -414,6 +427,33 @@ fn owed_rects(
         }
     }
     Some(rects)
+}
+
+/// At most [`MAX_RECTS`] rectangles covering every owing strip: owing strips are grouped into
+/// bands of whole strip rows, and each band becomes one rectangle spanning its owing columns.
+fn coarse_owed_rects(
+    debt: &[u8],
+    tiles_x: usize,
+    tiles_y: usize,
+    strip_w: usize,
+    strip_h: usize,
+) -> Vec<(usize, usize, usize, usize)> {
+    let band = tiles_y.div_ceil(MAX_RECTS).max(1);
+    let mut rects = Vec::with_capacity(tiles_y.div_ceil(band));
+    for ty0 in (0..tiles_y).step_by(band) {
+        let ty1 = (ty0 + band).min(tiles_y);
+        let mut span: Option<(usize, usize)> = None;
+        for ty in ty0..ty1 {
+            let row = &debt[ty * tiles_x..(ty + 1) * tiles_x];
+            if let (Some(first), Some(last)) = (row.iter().position(|&d| d > 0), row.iter().rposition(|&d| d > 0)) {
+                span = Some(span.map_or((first, last), |(a, b)| (a.min(first), b.max(last))));
+            }
+        }
+        if let Some((first, last)) = span {
+            rects.push((first * strip_w, ty0 * strip_h, (last + 1) * strip_w, ty1 * strip_h));
+        }
+    }
+    rects
 }
 
 #[cfg(test)]
@@ -462,6 +502,45 @@ mod tests {
             head.presented(&plan);
         }
         assert_eq!(head.plan(128, 32, &rgb), Plan::Idle);
+    }
+
+    /// Local displaylink-lite patch: change too scattered for MAX_RECTS exact rectangles (App
+    /// Exposé, a desktop swipe) is planned as one coarse delta covering every changed strip, not a
+    /// keyframe presented to every buffer at once, and it still reaches every dock buffer.
+    #[test]
+    fn scattered_change_is_a_coarse_delta_that_reaches_every_buffer() {
+        let (w, h) = (64 * 20, 16 * 140);
+        let mut head = HeadScanout::new(ridge());
+        let mut rgb = surface(w, h, 0x20);
+        head.plan(w, h, &rgb);
+        head.presented(&Plan::Keyframe);
+
+        // Every other strip of every strip row: 1400 separate runs, far beyond MAX_RECTS.
+        for ty in 0..140 {
+            for tx in (ty % 2..20).step_by(2) {
+                for y in ty * 16..ty * 16 + 16 {
+                    let row = (y * w + tx * 64) * 3;
+                    rgb[row..row + 64 * 3].fill(0xf0);
+                }
+            }
+        }
+        let plan = head.plan(w, h, &rgb);
+        let Plan::Damage(rects) = &plan else { panic!("expected a coarse delta, got {plan:?}") };
+        assert!(rects.len() <= MAX_RECTS);
+        for ty in 0..140 {
+            for tx in (ty % 2..20).step_by(2) {
+                let (x, y) = (tx * 64, ty * 16);
+                assert!(rects.iter().any(|r| r.0 <= x && x < r.2 && r.1 <= y && y < r.3), "strip {tx},{ty} not covered");
+            }
+        }
+        head.presented(&plan);
+        // The remaining copies follow on later frames until every buffer holds the change.
+        for _ in 1..ridge().damage_frames() {
+            let plan = head.plan(w, h, &rgb);
+            assert!(matches!(plan, Plan::Damage(_)));
+            head.presented(&plan);
+        }
+        assert_eq!(head.plan(w, h, &rgb), Plan::Idle);
     }
 
     /// Local displaylink-lite patch: a dirty hint covering the change plans what a full hash

@@ -56,6 +56,24 @@ struct SessionKeys {
     receiver_id_list: Vec<u8>,
 }
 
+/// Where the most recent [`ControlSession::present_rgb_dirty`] spent its time. Local
+/// displaylink-lite patch for performance counters; it only reads the clock around existing calls.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PresentTiming {
+    /// Hashing and selecting strips (`HeadScanout::plan_dirty`).
+    pub plan: Duration,
+    /// Encoding the selected strips into records (`HeadScanout::encode`).
+    pub encode: Duration,
+    /// Building each presentation's report and USB transfers (`frame_report`, `prefix_frame`).
+    pub pack: Duration,
+    /// Handing the transfers to the video endpoint (`submit_video`).
+    pub usb: Duration,
+    /// The status poll that follows every present.
+    pub poll: Duration,
+    /// The change was too scattered for exact damage rectangles and went as a coarse superset.
+    pub coarse_fallback: bool,
+}
+
 /// One authenticated userspace control session.
 pub struct ControlSession {
     dock: Dock,
@@ -98,6 +116,8 @@ pub struct ControlSession {
     /// is the whole of DLM's runtime hotplug policy on Ridge (docs/ridge.md). Local displaylink-lite
     /// patch; see vendor/vino/UPSTREAM.md.
     downstream_changed: bool,
+    /// See [`ControlSession::last_present`].
+    last_present: PresentTiming,
 }
 
 impl ControlSession {
@@ -152,6 +172,7 @@ impl ControlSession {
             scanout: core::array::from_fn(|_| crate::scanout::HeadScanout::new(profile)),
             cursor_shot: core::array::from_fn(|_| None),
             downstream_changed: false,
+            last_present: PresentTiming::default(),
         })
     }
 
@@ -237,6 +258,11 @@ impl ControlSession {
         self.scanout
             .get_mut(usize::from(head))
             .is_some_and(crate::scanout::HeadScanout::settle)
+    }
+
+    /// Stage timings of the most recent [`ControlSession::present_rgb_dirty`], on any head.
+    pub fn last_present(&self) -> PresentTiming {
+        self.last_present
     }
 
     /// The surface size the codec tiles, which is the mode rounded up to whole strips.
@@ -572,13 +598,20 @@ impl ControlSession {
         if head_index >= self.connectors() {
             return Err(format!("invalid Vino head {head}"));
         }
+        self.last_present = PresentTiming::default();
+        let started = Instant::now();
         let plan = self.scanout[head_index].plan_dirty(width, height, rgb, dirty);
-        let Some(frame) = self.scanout[head_index]
-            .encode(&plan, rgb, head)
-            .map_err(build_error("video frame"))?
-        else {
+        let planned = Instant::now();
+        self.last_present.plan = planned - started;
+        self.last_present.coarse_fallback =
+            plan != crate::scanout::Plan::Keyframe && self.scanout[head_index].last_plan_coarse();
+        let encoded = self.scanout[head_index].encode(&plan, rgb, head);
+        let mut mark = Instant::now();
+        self.last_present.encode = mark - planned;
+        let Some(frame) = encoded.map_err(build_error("video frame"))? else {
             // Nothing moved and nothing is owed. DLM puts zero bytes on the wire here.
             self.poll_status()?;
+            self.last_present.poll = mark.elapsed();
             return Ok(0);
         };
 
@@ -597,14 +630,20 @@ impl ControlSession {
                 head,
                 sequence.wrapping_add(repeat),
             );
+            let packed = Instant::now();
+            self.last_present.pack += packed - mark;
             self.submit_video(head, &stream)?;
+            mark = Instant::now();
+            self.last_present.usb += mark - packed;
             sent += stream.iter().map(Vec::len).sum::<usize>();
         }
         self.frame_seq[head_index] = sequence.wrapping_add(frame.presentations);
         // Published only now: every early return and transport error above deliberately leaves the
         // previous dock-visible state intact, so the next frame repairs it.
         self.scanout[head_index].presented(&plan);
+        let polling = Instant::now();
         self.poll_status()?;
+        self.last_present.poll = polling.elapsed();
         Ok(sent)
     }
 

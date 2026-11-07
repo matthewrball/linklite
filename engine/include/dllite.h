@@ -91,6 +91,57 @@ void dll_engine_set_cursor(DLLEngine *engine, const uint8_t *bgra, uint32_t widt
 /// none of the dock's heads when head < 0. Cheap; call on every pointer move.
 void dll_engine_move_cursor(DLLEngine *engine, int32_t head, int32_t x, int32_t y);
 
+/// Most heads one dll_engine_stats call reports.
+#define DLL_MAX_HEADS 4
+
+/// Engine-wide performance counters since the previous dll_engine_stats call.
+typedef struct {
+    /// Engine loop wakeups that went on to visit the heads.
+    uint64_t loop_passes;
+    /// Time the engine loop slept because the shared video budget was exhausted.
+    uint64_t budget_wait_us;
+} DLLEngineStats;
+
+/// One attached head's performance counters since the previous dll_engine_stats call.
+/// Times are summed microseconds.
+typedef struct {
+    uint8_t head;
+    /// Frames dll_engine_submit_frame accepted (matching the head's mode), changed or not.
+    uint64_t frames_submitted;
+    /// Presentations attempted: new frames and owed retransmissions, including ones that sent
+    /// nothing. Stage times below except submit_us accumulate over these.
+    uint64_t present_calls;
+    /// Presentations that put video bytes on the wire.
+    uint64_t presents;
+    /// Head visits with a new frame or a due retransmission held back by the video budget.
+    uint64_t skipped;
+    /// Presents whose change was too scattered for exact damage and went as a coarse superset.
+    uint64_t coarse_fallbacks;
+    /// Video bytes submitted to the dock.
+    uint64_t bytes_sent;
+    /// dll_engine_submit_frame: hashing and BGRA to RGB conversion, including its lock wait.
+    uint64_t submit_us;
+    /// Copying changed strips out of the head's mailbox, on every in-budget visit.
+    uint64_t take_us;
+    /// Selecting the strips to send.
+    uint64_t plan_us;
+    /// Encoding them.
+    uint64_t encode_us;
+    /// Building the frame reports and USB transfers.
+    uint64_t pack_us;
+    /// Submitting the transfers to the video endpoint.
+    uint64_t usb_us;
+    /// The status poll after each presentation.
+    uint64_t poll_us;
+} DLLHeadStats;
+
+/// Copy the performance counters accumulated since the previous call, and reset them.
+/// engine_stats, unless NULL, receives the engine-wide counters. heads, unless NULL, receives
+/// one entry per attached head, at most max_heads of them; returns how many were written.
+/// Every head's counters are reset whether or not they fit. Pass DLL_MAX_HEADS to see them all.
+size_t dll_engine_stats(DLLEngine *engine, DLLEngineStats *engine_stats, DLLHeadStats *heads,
+                        size_t max_heads);
+
 /// Blank every head, release the dock, join the engine thread, and free the engine.
 /// No callback runs after this returns. Must not be called from a callback. Before calling,
 /// exclude all other calls using this engine, including another stop; never use it afterwards.

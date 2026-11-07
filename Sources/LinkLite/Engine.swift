@@ -177,4 +177,18 @@ final class EngineHandle: @unchecked Sendable {
         guard let engine else { return }
         dll_engine_move_cursor(engine, head, x, y)
     }
+
+    /// Performance counters accumulated since the previous call, which resets them: engine-wide,
+    /// and one entry per attached head. Nil while the engine is not running.
+    func stats() -> (engine: DLLEngineStats, heads: [DLLHeadStats])? {
+        pthread_rwlock_rdlock(lock)
+        defer { pthread_rwlock_unlock(lock) }
+        guard let engine else { return nil }
+        var totals = DLLEngineStats()
+        var heads = [DLLHeadStats](repeating: DLLHeadStats(), count: Int(DLL_MAX_HEADS))
+        let count = heads.withUnsafeMutableBufferPointer {
+            dll_engine_stats(engine, &totals, $0.baseAddress, $0.count)
+        }
+        return (totals, Array(heads.prefix(count)))
+    }
 }

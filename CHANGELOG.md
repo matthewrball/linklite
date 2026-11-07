@@ -4,6 +4,14 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+## [0.3.13] - 2026-11-06
+
+### Changed
+
+- Smoother App Exposé, Mission Control and desktop swipes on dock monitors. Full-screen motion used to send every frame as a complete image three times over; it now sends each frame once and lets the remaining copies follow, as for any other change. Measured on two 4K monitors during Exposé and swipes, the busier monitor went from about 17 to 44 frames per second and the other from 22 to 29, while using less USB bandwidth.
+- Both monitors now get an equal turn when they are busy at the same time; the first monitor previously went first three times out of four.
+- Optional performance logging for diagnosing smoothness: `defaults write com.ball.linklite PerformanceLogging -bool true` (off by default).
+
 ## [0.3.12] - 2026-11-06
 
 ### Fixed
@@ -139,7 +147,8 @@ First tester build, released as **DisplayLink Lite**.
 - A still screen stays clean, with no stale boxes or flickering patches: changed areas get a follow-up pass once the screen settles, and frames cycle through all three of the dock's buffers.
 - Heavy motion (for example App Exposé on two 4K monitors) does not reset the dock: video across both monitors is held to 100 MB/s.
 
-[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.12...HEAD
+[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.13...HEAD
+[0.3.13]: https://github.com/matthewrball/linklite/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/matthewrball/linklite/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/matthewrball/linklite/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/matthewrball/linklite/compare/v0.3.9...v0.3.10
