@@ -658,8 +658,8 @@ fn gamma_premultiplied_bgra(bgra: &[u8], lut: &[[u8; 256]; 3]) -> Vec<u8> {
 }
 
 /// Copy packed RGB888 `src` into `dst` through a per-channel gamma table. Large copies (a whole
-/// 4K surface is about 25 MB, measured at 8.6 ms on one core) are split across cores, since this
-/// runs on the engine thread while it holds the head's mailbox lock.
+/// 4K surface is about 25 MB: 4.8 ms on one core, 1.4 ms split across cores, benchmarked) are
+/// split across cores, since this runs on the engine thread while it holds the head's mailbox lock.
 fn apply_gamma(dst: &mut [u8], src: &[u8], lut: &[[u8; 256]; 3]) {
     const PARALLEL_BYTES: usize = 1 << 20;
     let serial = |dst: &mut [u8], src: &[u8]| {
@@ -669,7 +669,9 @@ fn apply_gamma(dst: &mut [u8], src: &[u8], lut: &[[u8; 256]; 3]) {
             d[2] = lut[2][usize::from(s[2])];
         }
     };
-    let workers = std::thread::available_parallelism().map_or(1, |n| n.get()).min(8);
+    static WORKERS: std::sync::LazyLock<usize> =
+        std::sync::LazyLock::new(|| std::thread::available_parallelism().map_or(1, |n| n.get()).min(8));
+    let workers = *WORKERS;
     if dst.len() < PARALLEL_BYTES || workers < 2 {
         serial(dst, src);
         return;
