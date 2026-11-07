@@ -4,6 +4,12 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+## [0.3.12] - 2026-11-06
+
+### Fixed
+
+- After the displays sleep or the Mac locks, the dock monitors work again when you return. macOS stops all screen capture at display sleep, and LinkLite never restarted it, so the monitors kept showing the last frame and ignored clicks and typing ("Failed to find any displays or windows to capture"). LinkLite now restarts capture as soon as the Mac wakes or unlocks, and keeps retrying if capture stops for any other reason.
+
 ### Changed
 
 - With Reduce Motion on, the menu-bar panel now opens and closes instantly instead of fading.
@@ -133,7 +139,8 @@ First tester build, released as **DisplayLink Lite**.
 - A still screen stays clean, with no stale boxes or flickering patches: changed areas get a follow-up pass once the screen settles, and frames cycle through all three of the dock's buffers.
 - Heavy motion (for example App Exposé on two 4K monitors) does not reset the dock: video across both monitors is held to 100 MB/s.
 
-[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.11...HEAD
+[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.12...HEAD
+[0.3.12]: https://github.com/matthewrball/linklite/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/matthewrball/linklite/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/matthewrball/linklite/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/matthewrball/linklite/compare/v0.3.8...v0.3.9
