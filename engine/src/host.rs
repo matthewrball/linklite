@@ -5,11 +5,11 @@
 //! virtual-display card replaced by per-head mailboxes the macOS host fills.
 
 use crate::edid::{self, Monitor};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 use vino_chimera::kvino::DockProfile;
-use vino_chimera::session::ControlSession;
+use vino_chimera::session::{ControlSession, PresentTiming};
 use vino_chimera::MAX_CONNECTORS;
 
 const HEARTBEAT_PERIOD: Duration = Duration::from_secs(3);
@@ -60,6 +60,11 @@ impl VideoBudget {
 
     fn spend(&mut self, bytes: usize) {
         self.tokens -= bytes as f64;
+    }
+
+    /// Whether frames are being held back, as of the last refill.
+    fn exhausted(&self) -> bool {
+        self.tokens <= 0.0
     }
 
     /// How long to sleep: no longer than `frame_wait`, and no longer than it takes the bucket to
@@ -170,6 +175,108 @@ struct CursorBox {
     position_gen: u64,
 }
 
+/// One head's performance counters since the host last took them ([`Shared::take_stats`]).
+/// Each is an independent relaxed tally, so a snapshot may split one present's increments across
+/// two reports. Times accumulate in nanoseconds and are reported in microseconds.
+#[derive(Default)]
+struct HeadCounters {
+    /// Whether the head is accepting frames; only attached heads are reported.
+    attached: AtomicBool,
+    /// Set when capture leaves a frame the engine has not taken yet, cleared when the engine takes
+    /// the mailbox. Read without the lock, only to tell a budget-held frame from an idle head.
+    frame_ready: AtomicBool,
+    frames_submitted: AtomicU64,
+    submit_ns: AtomicU64,
+    take_ns: AtomicU64,
+    present_calls: AtomicU64,
+    presents: AtomicU64,
+    skipped: AtomicU64,
+    coarse_fallbacks: AtomicU64,
+    bytes_sent: AtomicU64,
+    plan_ns: AtomicU64,
+    encode_ns: AtomicU64,
+    pack_ns: AtomicU64,
+    usb_ns: AtomicU64,
+    poll_ns: AtomicU64,
+}
+
+impl HeadCounters {
+    /// Tally one `present_rgb_dirty` that put `sent` video bytes on the wire.
+    fn record_present(&self, sent: usize, timing: PresentTiming) {
+        self.present_calls.fetch_add(1, Ordering::Relaxed);
+        if sent > 0 {
+            self.presents.fetch_add(1, Ordering::Relaxed);
+            self.bytes_sent.fetch_add(sent as u64, Ordering::Relaxed);
+        }
+        if timing.coarse_fallback {
+            self.coarse_fallbacks.fetch_add(1, Ordering::Relaxed);
+        }
+        add_duration(&self.plan_ns, timing.plan);
+        add_duration(&self.encode_ns, timing.encode);
+        add_duration(&self.pack_ns, timing.pack);
+        add_duration(&self.usb_ns, timing.usb);
+        add_duration(&self.poll_ns, timing.poll);
+    }
+}
+
+#[derive(Default)]
+struct Perf {
+    heads: [HeadCounters; MAX_CONNECTORS],
+    /// Engine loop wakeups that went on to visit the heads.
+    loop_passes: AtomicU64,
+    /// Time the engine loop slept while the video budget was exhausted.
+    budget_wait_ns: AtomicU64,
+}
+
+fn add_duration(counter: &AtomicU64, elapsed: Duration) {
+    counter.fetch_add(u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX), Ordering::Relaxed);
+}
+
+fn add_elapsed(counter: &AtomicU64, since: Instant) {
+    add_duration(counter, since.elapsed());
+}
+
+fn take_us(counter: &AtomicU64) -> u64 {
+    counter.swap(0, Ordering::Relaxed) / 1_000
+}
+
+/// One head's counters over a [`Shared::take_stats`] interval. Times are microseconds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HeadStats {
+    /// Frames capture handed over that matched the head's mode, changed or not.
+    pub frames_submitted: u64,
+    /// `present_rgb_dirty` calls: new frames and owed retransmissions, including ones that sent
+    /// nothing.
+    pub present_calls: u64,
+    /// Presents that put video bytes on the wire.
+    pub presents: u64,
+    /// Head visits with a new frame or a due retransmission held back by an exhausted budget.
+    pub skipped: u64,
+    /// Presents whose change was too scattered for exact damage and went as a coarse superset.
+    pub coarse_fallbacks: u64,
+    /// Video bytes submitted to the dock.
+    pub bytes_sent: u64,
+    /// Capture-side hashing and BGRA→RGB conversion, including the mailbox lock wait.
+    pub submit_us: u64,
+    /// Engine-side copy of changed strips out of the mailbox, on every lit, in-budget visit.
+    pub take_us: u64,
+    pub plan_us: u64,
+    pub encode_us: u64,
+    /// Report and USB transfer assembly for each presentation.
+    pub pack_us: u64,
+    /// Video endpoint submission (`submit_video`).
+    pub usb_us: u64,
+    pub poll_us: u64,
+}
+
+/// Engine-wide counters over a [`Shared::take_stats`] interval, and each attached head's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct EngineStats {
+    pub loop_passes: u64,
+    pub budget_wait_us: u64,
+    pub heads: [Option<HeadStats>; MAX_CONNECTORS],
+}
+
 pub struct Shared {
     stop: AtomicBool,
     mailboxes: [Mutex<Mailbox>; MAX_CONNECTORS],
@@ -179,6 +286,7 @@ pub struct Shared {
     wake: Condvar,
     /// Processor availability is expensive to query and stable over a capture session.
     workers: usize,
+    perf: Perf,
 }
 
 impl Shared {
@@ -190,6 +298,7 @@ impl Shared {
             signal: Mutex::new(0),
             wake: Condvar::new(),
             workers: std::thread::available_parallelism().map_or(1, |n| n.get()),
+            perf: Perf::default(),
         })
     }
 
@@ -229,17 +338,35 @@ impl Shared {
         height: usize,
         dirty: impl IntoIterator<Item = Rect>,
     ) {
-        let Some(slot) = self.mailboxes.get(head) else {
+        let Some(counters) = self.perf.heads.get(head) else {
             return;
         };
-        let mut guard = slot.lock().unwrap();
+        let started = Instant::now();
+        if self.convert_frame(head, bgra, stride, width, height, dirty) {
+            counters.frames_submitted.fetch_add(1, Ordering::Relaxed);
+            add_elapsed(&counters.submit_ns, started);
+        }
+    }
+
+    /// [`Shared::submit_frame`] for a head in range. Returns whether the frame was accepted (the
+    /// head is accepting frames of this size), whatever it changed.
+    fn convert_frame(
+        &self,
+        head: usize,
+        bgra: &[u8],
+        stride: usize,
+        width: usize,
+        height: usize,
+        dirty: impl IntoIterator<Item = Rect>,
+    ) -> bool {
+        let mut guard = self.mailboxes[head].lock().unwrap();
         let mailbox = &mut *guard;
         let Some(a) = mailbox.accepting else {
-            return;
+            return false;
         };
-        let Some(len) = frame_len(stride, width, height) else { return };
+        let Some(len) = frame_len(stride, width, height) else { return false };
         if (a.width, a.height) != (width, height) || bgra.len() < len {
-            return;
+            return false;
         }
         let (tiles_x, tiles_y) = a.tiles();
         let fresh = mailbox.surface.len() != a.padded_width * 3 * a.padded_height;
@@ -273,7 +400,7 @@ impl Shared {
             dirty.into_iter().for_each(mark);
         }
         if !any {
-            return;
+            return true;
         }
         let candidates = &mailbox.candidates;
 
@@ -336,10 +463,12 @@ impl Shared {
         drop(bands);
         mailbox.changed_count += newly;
         if newly == 0 && !mailbox.all_changed {
-            return;
+            return true;
         }
+        self.perf.heads[head].frame_ready.store(true, Ordering::Relaxed);
         drop(guard);
         self.notify();
+        true
     }
 
     pub fn set_power(&self, head: usize, on: bool) {
@@ -352,16 +481,22 @@ impl Shared {
     fn open(&self, head: usize, accepting: Accepting) {
         let mut mailbox = self.mailboxes[head].lock().unwrap();
         *mailbox = Mailbox { accepting: Some(accepting), ..Mailbox::default() };
+        self.perf.heads[head].frame_ready.store(false, Ordering::Relaxed);
+        self.perf.heads[head].attached.store(true, Ordering::Relaxed);
     }
 
     fn close(&self, head: usize) {
         *self.mailboxes[head].lock().unwrap() = Mailbox::default();
+        self.perf.heads[head].frame_ready.store(false, Ordering::Relaxed);
+        self.perf.heads[head].attached.store(false, Ordering::Relaxed);
     }
 
     /// Bring `shadow` up to the head's latest surface if it changed, returning the strip-aligned
     /// areas that changed (`Some(None)`: all of it). Copies only those areas.
     fn take_frame(&self, head: usize, shadow: &mut Vec<u8>) -> Option<Option<Vec<Rect>>> {
         let mut guard = self.mailboxes[head].lock().unwrap();
+        // Whatever this returns, the mailbox holds nothing new once it does.
+        self.perf.heads[head].frame_ready.store(false, Ordering::Relaxed);
         let mailbox = &mut *guard;
         let a = mailbox.accepting?;
         if !mailbox.all_changed && mailbox.changed_count == 0 {
@@ -406,6 +541,34 @@ impl Shared {
 
     fn take_power(&self, head: usize) -> Option<bool> {
         self.mailboxes[head].lock().unwrap().power.take()
+    }
+
+    /// Performance counters accumulated since the previous call, which are reset. Heads are
+    /// reported while attached; a detached head's counters are discarded.
+    pub fn take_stats(&self) -> EngineStats {
+        EngineStats {
+            loop_passes: self.perf.loop_passes.swap(0, Ordering::Relaxed),
+            budget_wait_us: take_us(&self.perf.budget_wait_ns),
+            heads: core::array::from_fn(|head| {
+                let c = &self.perf.heads[head];
+                let stats = HeadStats {
+                    frames_submitted: c.frames_submitted.swap(0, Ordering::Relaxed),
+                    present_calls: c.present_calls.swap(0, Ordering::Relaxed),
+                    presents: c.presents.swap(0, Ordering::Relaxed),
+                    skipped: c.skipped.swap(0, Ordering::Relaxed),
+                    coarse_fallbacks: c.coarse_fallbacks.swap(0, Ordering::Relaxed),
+                    bytes_sent: c.bytes_sent.swap(0, Ordering::Relaxed),
+                    submit_us: take_us(&c.submit_ns),
+                    take_us: take_us(&c.take_ns),
+                    plan_us: take_us(&c.plan_ns),
+                    encode_us: take_us(&c.encode_ns),
+                    pack_us: take_us(&c.pack_ns),
+                    usb_us: take_us(&c.usb_ns),
+                    poll_us: take_us(&c.poll_ns),
+                };
+                c.attached.load(Ordering::Relaxed).then_some(stats)
+            }),
+        }
     }
 
     pub fn set_cursor_shape(&self, shape: CursorShape) {
@@ -594,8 +757,12 @@ fn run_session(
                 output.lit && (!output.settled || session.owes_repaint(head as u8))
             })
         });
+        // Whether this sleep is the budget holding video back, for the performance counters.
+        let mut budget_starved = false;
         let wait = if busy {
-            budget.wait_hint(frame_wait)
+            let hint = budget.wait_hint(frame_wait);
+            budget_starved = budget.exhausted();
+            hint
         } else {
             let now = Instant::now();
             // Only deadlines that will actually be acted on: a stale presence deadline for a dock
@@ -614,26 +781,47 @@ fn run_session(
             .map_or(frame_wait, |due| due.saturating_duration_since(now))
             .max(Duration::from_millis(1))
         };
+        let slept = Instant::now();
         shared.wait(&mut seen, wait);
+        if budget_starved {
+            add_elapsed(&shared.perf.budget_wait_ns, slept);
+        }
         if shared.stopping() {
             break;
         }
+        shared.perf.loop_passes.fetch_add(1, Ordering::Relaxed);
         if profile.hw_cursor() {
             sync_cursor(shared, &mut session, outputs, &mut cursor_position_applied)?;
         }
-        // Start from a different head each pass so one busy screen cannot starve the other of the
-        // shared budget.
-        first_head = (first_head + 1) % MAX_CONNECTORS;
+        // Start from the next lit head each pass so one busy screen cannot starve the other of the
+        // shared budget. Stepping over every connector slot instead would let the first of two
+        // monitors go first in three passes out of four.
+        first_head = (1..=MAX_CONNECTORS)
+            .map(|i| (first_head + i) % MAX_CONNECTORS)
+            .find(|&head| outputs[head].as_ref().is_some_and(|output| output.lit))
+            .unwrap_or(0);
         for head in (0..MAX_CONNECTORS).map(|i| (first_head + i) % MAX_CONNECTORS) {
             let Some(output) = outputs[head].as_mut() else { continue };
             if let Some(on) = shared.take_power(head) {
                 set_power(&mut session, output, head as u8, on)?;
             }
-            if !output.lit || !budget.available() {
+            if !output.lit {
+                continue;
+            }
+            let counters = &shared.perf.heads[head];
+            if !budget.available() {
+                let repaint_due = !output.shadow.is_empty()
+                    && session.owes_repaint(head as u8)
+                    && Instant::now() >= output.next_repaint;
+                if counters.frame_ready.load(Ordering::Relaxed) || repaint_due {
+                    counters.skipped.fetch_add(1, Ordering::Relaxed);
+                }
                 continue;
             }
             let now = Instant::now();
-            if let Some(dirty) = shared.take_frame(head, &mut output.shadow) {
+            let taken = shared.take_frame(head, &mut output.shadow);
+            add_elapsed(&counters.take_ns, now);
+            if let Some(dirty) = taken {
                 let sent = session.present_rgb_dirty(
                     head as u8,
                     output.padded_width,
@@ -641,6 +829,7 @@ fn run_session(
                     &output.shadow,
                     dirty.as_deref(),
                 )?;
+                counters.record_present(sent, session.last_present());
                 budget.spend(sent);
                 output.last_change = now;
                 output.settled = false;
@@ -665,6 +854,7 @@ fn run_session(
                         &output.shadow,
                         Some(&[]),
                     )?;
+                    counters.record_present(sent, session.last_present());
                     budget.spend(sent);
                     output.next_repaint = now + refresh_period(output.mode);
                 }
@@ -1027,6 +1217,40 @@ mod tests {
         shared.submit_frame(0, &[3; 32], 16, 4, 2, [(0, 0, 4, 2)]);
         assert_eq!(shared.take_frame(0, &mut shadow), Some(Some(vec![(0, 0, 4, 1), (0, 1, 2, 2)])));
         assert_eq!(shadow, vec![3; 24]);
+    }
+
+    #[test]
+    fn stats_count_accepted_frames_per_attached_head_and_reset_when_taken() {
+        let shared = Shared::new();
+        let mut shadow = Vec::new();
+        // Not attached: neither counted nor reported.
+        shared.submit_frame(0, &[1; 16], 8, 2, 2, [(0, 0, 2, 2)]);
+        assert_eq!(shared.take_stats(), EngineStats::default());
+
+        shared.open(1, accepting(2, 2, 2, 2));
+        shared.submit_frame(1, &[1; 16], 8, 2, 2, [(0, 0, 2, 2)]);
+        assert!(shared.perf.heads[1].frame_ready.load(Ordering::Relaxed));
+        // Unchanged pixels still count as a submitted frame; a wrong size does not.
+        shared.submit_frame(1, &[1; 16], 8, 2, 2, [(0, 0, 2, 2)]);
+        shared.submit_frame(1, &[1; 36], 12, 3, 3, [(0, 0, 3, 3)]);
+        assert!(shared.take_frame(1, &mut shadow).is_some());
+        assert!(!shared.perf.heads[1].frame_ready.load(Ordering::Relaxed));
+        shared.perf.heads[1].record_present(
+            5_000,
+            PresentTiming { coarse_fallback: true, usb: Duration::from_micros(7), ..Default::default() },
+        );
+        shared.perf.heads[1].record_present(0, PresentTiming::default());
+
+        let stats = shared.take_stats();
+        assert!(stats.heads[0].is_none());
+        let head = stats.heads[1].unwrap();
+        assert_eq!(head.frames_submitted, 2);
+        assert_eq!((head.present_calls, head.presents, head.bytes_sent), (2, 1, 5_000));
+        assert_eq!((head.coarse_fallbacks, head.usb_us), (1, 7));
+        assert_eq!(shared.take_stats().heads[1], Some(HeadStats::default()));
+
+        shared.close(1);
+        assert_eq!(shared.take_stats(), EngineStats::default());
     }
 
     #[test]

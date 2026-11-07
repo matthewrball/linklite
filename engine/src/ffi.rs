@@ -3,7 +3,7 @@
 //! The C ABI declared in `include/dllite.h`.
 
 use crate::edid::Monitor;
-use crate::host::{self, CursorShape, Events, Mode, Shared, State};
+use crate::host::{self, CursorShape, Events, HeadStats, Mode, Shared, State};
 use std::ffi::{c_char, c_void, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
@@ -200,6 +200,87 @@ pub unsafe extern "C" fn dll_engine_move_cursor(engine: *mut DLLEngine, head: i3
     }
 }
 
+/// Heads a `dll_engine_stats` call can report; `DLL_MAX_HEADS` in dllite.h.
+const MAX_HEADS: usize = 4;
+const _: () = assert!(MAX_HEADS == vino_chimera::MAX_CONNECTORS);
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DLLEngineStats {
+    pub loop_passes: u64,
+    pub budget_wait_us: u64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DLLHeadStats {
+    pub head: u8,
+    pub frames_submitted: u64,
+    pub present_calls: u64,
+    pub presents: u64,
+    pub skipped: u64,
+    pub coarse_fallbacks: u64,
+    pub bytes_sent: u64,
+    pub submit_us: u64,
+    pub take_us: u64,
+    pub plan_us: u64,
+    pub encode_us: u64,
+    pub pack_us: u64,
+    pub usb_us: u64,
+    pub poll_us: u64,
+}
+
+impl DLLHeadStats {
+    fn new(head: u8, stats: HeadStats) -> Self {
+        Self {
+            head,
+            frames_submitted: stats.frames_submitted,
+            present_calls: stats.present_calls,
+            presents: stats.presents,
+            skipped: stats.skipped,
+            coarse_fallbacks: stats.coarse_fallbacks,
+            bytes_sent: stats.bytes_sent,
+            submit_us: stats.submit_us,
+            take_us: stats.take_us,
+            plan_us: stats.plan_us,
+            encode_us: stats.encode_us,
+            pack_us: stats.pack_us,
+            usb_us: stats.usb_us,
+            poll_us: stats.poll_us,
+        }
+    }
+}
+
+/// # Safety
+/// `engine` must come from `dll_engine_start` and not yet be stopped. `engine_stats`, unless
+/// null, must point to a writable `DLLEngineStats`; `heads`, unless null, to `max_heads`
+/// writable `DLLHeadStats`.
+#[no_mangle]
+pub unsafe extern "C" fn dll_engine_stats(
+    engine: *mut DLLEngine,
+    engine_stats: *mut DLLEngineStats,
+    heads: *mut DLLHeadStats,
+    max_heads: usize,
+) -> usize {
+    let Some(engine) = (unsafe { engine.as_ref() }) else { return 0 };
+    let Ok(stats) = catch_unwind(AssertUnwindSafe(|| engine.shared.take_stats())) else { return 0 };
+    if let Some(out) = unsafe { engine_stats.as_mut() } {
+        *out = DLLEngineStats { loop_passes: stats.loop_passes, budget_wait_us: stats.budget_wait_us };
+    }
+    if heads.is_null() {
+        return 0;
+    }
+    let attached = stats.heads.iter().enumerate().filter_map(|(head, stats)| {
+        stats.map(|stats| DLLHeadStats::new(head as u8, stats))
+    });
+    let mut count = 0;
+    for entry in attached.take(max_heads) {
+        unsafe { heads.add(count).write(entry) };
+        count += 1;
+    }
+    count
+}
+
 /// # Safety
 /// `engine` must come from `dll_engine_start`; it is freed and must not be used afterwards.
 /// The caller must exclude concurrent calls using this engine, and must not stop from a callback
@@ -251,5 +332,20 @@ mod tests {
         // Rejected input must not poison engine state for later control calls.
         unsafe { dll_engine_set_display_power(&mut engine, 0, true) };
         assert!(!engine.shared.stopping());
+    }
+
+    #[test]
+    fn stats_report_only_attached_heads_and_tolerate_null_outputs() {
+        let mut engine = DLLEngine { shared: Shared::new(), thread: None };
+        let mut totals = DLLEngineStats { loop_passes: 9, budget_wait_us: 9 };
+        let mut heads = [DLLHeadStats { head: 7, ..Default::default() }; MAX_HEADS];
+        let count = unsafe { dll_engine_stats(&mut engine, &mut totals, heads.as_mut_ptr(), heads.len()) };
+        assert_eq!(count, 0);
+        assert_eq!(totals, DLLEngineStats::default());
+        assert_eq!(heads[0].head, 7);
+        unsafe {
+            assert_eq!(dll_engine_stats(&mut engine, std::ptr::null_mut(), std::ptr::null_mut(), 4), 0);
+            assert_eq!(dll_engine_stats(std::ptr::null_mut(), &mut totals, heads.as_mut_ptr(), 4), 0);
+        }
     }
 }

@@ -8,6 +8,7 @@ import os
 import ScreenCaptureKit
 
 private let log = Logger(subsystem: "com.ball.linklite", category: "host")
+private let perfLog = Logger(subsystem: "com.ball.linklite", category: "perf")
 
 /// Ties the engine to macOS: one virtual display plus one capture stream per attached dock head.
 @MainActor
@@ -37,6 +38,11 @@ final class DisplayHost {
     private lazy var cursor = CursorTracker(engine: engine)
     private var displayReconfigured: NSObjectProtocol?
     private static let configuredMonitorsKey = "ConfiguredMonitors"
+    /// `defaults write com.ball.linklite PerformanceLogging -bool true` logs engine counters once a
+    /// second (category "perf"); read at start.
+    private static let performanceLoggingKey = "PerformanceLogging"
+    private var perfTimer: Timer?
+    private var perfIntervalStart = ContinuousClock.now
 
     /// A detached head's virtual display, kept briefly for a reconnect.
     private struct Retained {
@@ -64,12 +70,71 @@ final class DisplayHost {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.updateCursorTargets() }
         }
+        if UserDefaults.standard.bool(forKey: Self.performanceLoggingKey) {
+            startPerformanceLogging()
+        }
         onChange?()
     }
 
     /// Blanks the monitors and releases the dock. Blocks until the engine thread has exited.
     func stop() {
+        perfTimer?.invalidate()
+        perfTimer = nil
         engine.stop()
+    }
+
+    private func startPerformanceLogging() {
+        // Discard anything counted before the first interval starts.
+        _ = engine.stats()
+        perfIntervalStart = .now
+        perfTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.logPerformance() }
+        }
+    }
+
+    /// One line per attached head: rates over the interval since the last line, and the average
+    /// milliseconds each presentation spent per stage (submit: per captured frame).
+    private func logPerformance() {
+        let now = ContinuousClock.now
+        let seconds = (now - perfIntervalStart) / .seconds(1)
+        perfIntervalStart = now
+        guard seconds > 0, let stats = engine.stats() else { return }
+        let passesPerSecond = Double(stats.engine.loop_passes) / seconds
+        let budgetWaitPerSecond = Double(stats.engine.budget_wait_us) / 1000 / seconds
+        for head in stats.heads {
+            let fps = Double(head.frames_submitted) / seconds
+            let presents = Double(head.presents) / seconds
+            let calls = Double(head.present_calls) / seconds
+            let skipped = Double(head.skipped) / seconds
+            let coarse = Double(head.coarse_fallbacks) / seconds
+            let megabytes = Double(head.bytes_sent) / 1_000_000 / seconds
+            let perPresent = { (us: UInt64) in Double(us) / 1000 / Double(max(head.present_calls, 1)) }
+            let take = perPresent(head.take_us)
+            let plan = perPresent(head.plan_us)
+            let encode = perPresent(head.encode_us)
+            let pack = perPresent(head.pack_us)
+            let usb = perPresent(head.usb_us)
+            let poll = perPresent(head.poll_us)
+            let submit = Double(head.submit_us) / 1000 / Double(max(head.frames_submitted, 1))
+            perfLog.info("""
+                head \(head.head, privacy: .public): \
+                \(fps, format: .fixed(precision: 1), privacy: .public) fps in, \
+                \(presents, format: .fixed(precision: 1), privacy: .public) presents/s \
+                (\(calls, format: .fixed(precision: 1), privacy: .public) calls/s), \
+                \(skipped, format: .fixed(precision: 1), privacy: .public) skipped/s, \
+                \(coarse, format: .fixed(precision: 1), privacy: .public) coarse/s, \
+                \(megabytes, format: .fixed(precision: 2), privacy: .public) MB/s; \
+                ms/present take \(take, format: .fixed(precision: 2), privacy: .public) \
+                plan \(plan, format: .fixed(precision: 2), privacy: .public) \
+                encode \(encode, format: .fixed(precision: 2), privacy: .public) \
+                pack \(pack, format: .fixed(precision: 2), privacy: .public) \
+                usb \(usb, format: .fixed(precision: 2), privacy: .public) \
+                poll \(poll, format: .fixed(precision: 2), privacy: .public); \
+                ms/frame submit \(submit, format: .fixed(precision: 2), privacy: .public); \
+                engine \(passesPerSecond, format: .fixed(precision: 0), privacy: .public) passes/s, \
+                budget wait \(budgetWaitPerSecond, format: .fixed(precision: 1), privacy: .public) ms/s
+                """)
+        }
     }
 
     func setDisplayPower(on: Bool) {
