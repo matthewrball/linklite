@@ -64,9 +64,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 MainActor.assumeIsolated {
                     log.info("\(name.rawValue, privacy: .public): display power \(on ? "on" : "off")")
                     self?.host.setDisplayPower(on: on)
+                    if on { self?.host.resumeCapture() }
                 }
             })
         }
+        // Locking the screen stops every ScreenCaptureKit stream; restart them as soon as the
+        // user is back, rather than waiting for the next scheduled retry.
+        workspaceObservers.append(center.addObserver(
+            forName: NSWorkspace.sessionDidBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.host.resumeCapture() }
+        })
+        workspaceObservers.append(DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                log.info("Screen unlocked")
+                self?.host.resumeCapture()
+            }
+        })
     }
 
     // MARK: Panel

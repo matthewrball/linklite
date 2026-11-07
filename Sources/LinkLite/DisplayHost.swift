@@ -21,6 +21,9 @@ final class DisplayHost {
         var startTask: Task<Void, Never>?
         var problem: String?
         var rebuiltAfterTermination = false
+        /// A scheduled restart after the stream stopped or failed to start, and how many in a row.
+        var retryTask: Task<Void, Never>?
+        var retryAttempt = 0
     }
 
     private(set) var engineState: DLLState?
@@ -79,10 +82,22 @@ final class DisplayHost {
     func refreshScreenRecordingAccess() {
         guard screenRecordingDenied, CGPreflightScreenCaptureAccess() else { return }
         screenRecordingDenied = false
-        for (head, state) in heads where state.capture == nil && state.startTask == nil {
+        resumeCapture()
+        onChange?()
+    }
+
+    /// Restarts capture now for every head whose stream is down, e.g. after the Mac wakes or
+    /// unlocks. ScreenCaptureKit stops all streams when the screen locks or the displays sleep
+    /// (SCStreamError -3815); until a new stream starts, the dock keeps showing the last frame.
+    func resumeCapture() {
+        guard !screenRecordingDenied else { return }
+        for (head, state) in heads where state.display != nil && state.capture == nil && state.startTask == nil {
+            heads[head]?.retryTask?.cancel()
+            heads[head]?.retryTask = nil
+            heads[head]?.retryAttempt = 0
+            log.info("Resuming capture for head \(head)")
             startCapture(head: head)
         }
-        onChange?()
     }
 
     private func handle(_ event: EngineEvent) {
@@ -149,6 +164,7 @@ final class DisplayHost {
     private func detach(head: UInt8, keepDisplay: Bool = true) {
         guard let state = heads.removeValue(forKey: head) else { return }
         state.startTask?.cancel()
+        state.retryTask?.cancel()
         let capture = state.capture
         if keepDisplay, let display = state.display {
             let release = Task { [weak self] in
@@ -209,10 +225,15 @@ final class DisplayHost {
                 }
                 self.heads[head]?.capture = capture
                 self.heads[head]?.startTask = nil
+                if self.heads[head]?.retryAttempt ?? 0 > 0 {
+                    log.info("Capture for head \(head) restarted")
+                }
+                self.heads[head]?.retryAttempt = 0
             } catch {
                 guard let self, self.heads[head]?.captureToken == token else { return }
                 self.heads[head]?.startTask = nil
                 self.recordCaptureFailure(head: head, error: error)
+                self.scheduleCaptureRetry(head: head)
             }
             self?.onChange?()
         }
@@ -223,7 +244,25 @@ final class DisplayHost {
         guard heads[head]?.captureToken == token else { return }
         heads[head]?.capture = nil
         recordCaptureFailure(head: head, error: error)
+        scheduleCaptureRetry(head: head)
         onChange?()
+    }
+
+    /// Retries capture after 1, 2, 4… seconds (capped at 30) until it runs again or the head goes
+    /// away. A wake or unlock restarts it immediately through `resumeCapture()`.
+    private func scheduleCaptureRetry(head: UInt8) {
+        guard !screenRecordingDenied, let state = heads[head], state.display != nil else { return }
+        state.retryTask?.cancel()
+        let delay = min(30, 1 << min(state.retryAttempt, 5))
+        heads[head]?.retryAttempt = state.retryAttempt + 1
+        heads[head]?.retryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self, let state = self.heads[head],
+                  state.capture == nil, state.startTask == nil, !self.screenRecordingDenied else { return }
+            self.heads[head]?.retryTask = nil
+            log.info("Retrying capture for head \(head) (attempt \(state.retryAttempt))")
+            self.startCapture(head: head)
+        }
     }
 
     private func recordCaptureFailure(head: UInt8, error: Error) {
