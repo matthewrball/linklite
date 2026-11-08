@@ -1,0 +1,64 @@
+# LinkLite: download statistics
+#
+# Once a day, records each release asset's all-time download count (and, when the STATS_TOKEN
+# secret is set, the repository's daily views and clones) as CSV on the `stats` branch, so the
+# numbers have a history beyond GitHub's current totals and 14-day traffic window.
+# See scripts/download-stats.py and docs/RELEASING.md#download-statistics.
+
+name: Download stats
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: download-stats
+  cancel-in-progress: false
+
+jobs:
+  record:
+    name: Record download stats
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the script
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6, Node 24
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/download-stats.py
+          sparse-checkout-cone-mode: false
+
+      - name: Check out or start the stats branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$remote" stats >/dev/null; then
+            git clone --quiet --depth 1 --branch stats "$remote" stats
+          else
+            git init --quiet -b stats stats
+            git -C stats remote add origin "$remote"
+          fi
+
+      - name: Record today's numbers
+        env:
+          # Downloads work with the workflow token; traffic needs push-level access, so it is
+          # recorded only when an owner-provided STATS_TOKEN secret exists.
+          GH_TOKEN: ${{ secrets.STATS_TOKEN || github.token }}
+        run: python3 scripts/download-stats.py --record stats
+
+      - name: Commit and push
+        run: |
+          cd stats
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No change"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "Download stats $(date -u +%F)"
+          git push --quiet origin stats
