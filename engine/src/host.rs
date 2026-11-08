@@ -31,7 +31,9 @@ const SETTLE_DELAY: Duration = Duration::from_millis(100);
 
 /// Sustained video rate the dock is fed, for all heads together. Vino measured DLM on this dock
 /// family at 120 MB/s over one second and 99 MB/s over five. With no limit, full-screen motion
-/// (App Exposé on two 4K screens) reset an M/Connect 2 off the USB bus within minutes.
+/// (App Exposé on two 4K screens) reset an M/Connect 2 off the USB bus within minutes. This caps
+/// the video bytes each present reports, not every byte on the bus: status polls, cursor and other
+/// control traffic, and USB protocol overhead come on top.
 const VIDEO_BYTES_PER_SEC: f64 = 100_000_000.0;
 /// Burst the budget may bank: one 4K keyframe presented to both of a Ridge dock's buffers.
 const VIDEO_BURST_BYTES: f64 = 8_000_000.0;
