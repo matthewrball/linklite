@@ -88,8 +88,24 @@ pub(crate) fn colour(r: i32, g: i32, b: i32) -> (i32, i32, i32) {
 ///
 /// This function must remain out of line. Inlining it into the frame encoder combines the
 /// transform scratch arrays with its callers and can exhaust a 16-KiB kernel stack.
+///
+/// With NEON available at compile time (userspace arm64; never the kernel, whose arm64 target
+/// disables it) this runs [`transform_neon`], which yields exactly [`transform_scalar`]'s
+/// coefficients.
 #[inline(never)]
 pub(crate) fn transform(block: &[i32; PIXELS]) -> [i32; COEFFS] {
+    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+    return transform_neon(block);
+    #[cfg(not(all(target_arch = "aarch64", target_feature = "neon")))]
+    return transform_scalar(block);
+}
+/// The portable [`transform`].
+#[cfg_attr(
+    all(target_arch = "aarch64", target_feature = "neon"),
+    allow(dead_code)
+)]
+#[inline(always)]
+pub(crate) fn transform_scalar(block: &[i32; PIXELS]) -> [i32; COEFFS] {
     let sh = |x: i32| x >> 6; // arithmetic shift: wire fixed-point floor division by 64
                               // Level 1: 8x8 -> three 4x4 detail bands.
     let (mut ll1, mut hl1, mut lh1, mut hh1) = ([0i32; 16], [0i32; 16], [0i32; 16], [0i32; 16]);
@@ -124,6 +140,72 @@ pub(crate) fn transform(block: &[i32; PIXELS]) -> [i32; COEFFS] {
         out[16 + i] = sh(hl1[m]);
         out[32 + i] = sh(lh1[m]);
         out[48 + i] = sh(hh1[m]);
+    }
+    out
+}
+/// [`transform_scalar`] four lanes at a time.
+///
+/// Haar steps are exact integer sums and differences (an 8x8 block of 10-bit x64 samples stays
+/// far inside `i32`), so the order of the row and column passes changes no coefficient:
+/// `(a+b)+(c+d) == (a+c)+(b+d)`, `(a-b)+(c-d) == (a+c)-(b+d)`, and so on. Each level here
+/// therefore runs the column pass first, as whole-row vector adds, and the row pass second by
+/// splitting each row into its even and odd columns (`uzp1`/`uzp2`). The level-one Morton scan
+/// is the same split applied across rows 0/2 and 1/3 of each band.
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+#[inline(always)]
+fn transform_neon(block: &[i32; PIXELS]) -> [i32; COEFFS] {
+    use core::arch::aarch64::{
+        int32x4_t, vaddq_s32, vdupq_n_s32, vgetq_lane_s32, vld1q_s32, vshrq_n_s32, vst1q_s32,
+        vsubq_s32, vuzp1q_s32, vuzp2q_s32,
+    };
+    let mut out = [0i32; COEFFS];
+    let src = block.as_ptr();
+    let dst = out.as_mut_ptr();
+    // SAFETY: NEON is enabled for the whole build (the `cfg` above). Every load reads 4 lanes
+    // at `8 * r + {0, 4}` for `r < 8`, inside the 64-element `block`; every store writes 4 lanes
+    // at offsets `4..64` step 4, inside the 64-element `out`.
+    unsafe {
+        // Even/odd column split of one row: (sum, difference) of each horizontal pair.
+        let pairs = |a: int32x4_t, b: int32x4_t| {
+            let (even, odd) = (vuzp1q_s32(a, b), vuzp2q_s32(a, b));
+            (vaddq_s32(even, odd), vsubq_s32(even, odd))
+        };
+        let sh = |v: int32x4_t| vshrq_n_s32::<6>(v); // floor division by 64, as the scalar path
+        let row = |r: usize| (vld1q_s32(src.add(8 * r)), vld1q_s32(src.add(8 * r + 4)));
+        // Level 1: rows `2i`/`2i+1` give row `i` of each 4x4 band.
+        let zero = vdupq_n_s32(0);
+        let (mut ll1, mut hl1, mut lh1, mut hh1) = ([zero; 4], [zero; 4], [zero; 4], [zero; 4]);
+        for i in 0..4 {
+            let ((a0, a1), (b0, b1)) = (row(2 * i), row(2 * i + 1));
+            let (lo, dlo) = pairs(vaddq_s32(a0, b0), vaddq_s32(a1, b1));
+            let (hi, dhi) = pairs(vsubq_s32(a0, b0), vsubq_s32(a1, b1));
+            (ll1[i], hl1[i], lh1[i], hh1[i]) = (lo, sh(dlo), sh(hi), sh(dhi));
+        }
+        // Level-one bands in 2x2 Morton order: the even then odd columns of rows 0 and 2, then
+        // of rows 1 and 3 -- `SCAN4_MORTON` in `transform_scalar`.
+        for (base, band) in [(16, &hl1), (32, &lh1), (48, &hh1)] {
+            vst1q_s32(dst.add(base), vuzp1q_s32(band[0], band[2]));
+            vst1q_s32(dst.add(base + 4), vuzp2q_s32(band[0], band[2]));
+            vst1q_s32(dst.add(base + 8), vuzp1q_s32(band[1], band[3]));
+            vst1q_s32(dst.add(base + 12), vuzp2q_s32(band[1], band[3]));
+        }
+        // Level 2 on LL1: column pass on row pairs (0,1) and (2,3), then one even/odd split
+        // across both gives the 2x2 bands row-major.
+        let (v0, v1) = (vaddq_s32(ll1[0], ll1[1]), vaddq_s32(ll1[2], ll1[3]));
+        let (d0, d1) = (vsubq_s32(ll1[0], ll1[1]), vsubq_s32(ll1[2], ll1[3]));
+        let (ll2, hl2) = pairs(v0, v1);
+        let (lh2, hh2) = pairs(d0, d1);
+        vst1q_s32(dst.add(4), sh(hl2));
+        vst1q_s32(dst.add(8), sh(lh2));
+        vst1q_s32(dst.add(12), sh(hh2));
+        // Level 3 on the 2x2 LL2, in scalar.
+        let (p0, p1) = (vgetq_lane_s32::<0>(ll2), vgetq_lane_s32::<1>(ll2));
+        let (p2, p3) = (vgetq_lane_s32::<2>(ll2), vgetq_lane_s32::<3>(ll2));
+        let (l0, l1, h0, h1) = (p0 + p1, p2 + p3, p0 - p1, p2 - p3);
+        out[0] = (l0 + l1) >> 6;
+        out[1] = (h0 + h1) >> 6;
+        out[2] = (l0 - l1) >> 6;
+        out[3] = (h0 - h1) >> 6;
     }
     out
 }
@@ -244,8 +326,9 @@ impl Vlc {
     }
 }
 /// Magnitude category of a quantized coefficient: `bit_length(|coeff|)`, or zero for zero.
+#[inline(always)]
 pub(crate) fn mag_category(coeff: i32) -> u32 {
-    coeff.unsigned_abs().checked_ilog2().map_or(0, |l| l + 1)
+    u32::BITS - coeff.unsigned_abs().leading_zeros()
 }
 /// Maximum DC escape category at 8 bits per channel; the maximum category omits the unary
 /// 0-terminator (a complete prefix code on categories `1..=SOLID_DC_CMAX`).
@@ -330,60 +413,74 @@ impl Depth {
 }
 /// LSB-first bit accumulator for the production AC-strip coder.
 ///
-/// Bits are buffered in a 64-bit word and copied to `out` a byte at a time. `out` is incomplete
-/// until [`Bits::finish`] flushes the final zero-padded partial byte.
+/// Bits are buffered in a 64-bit word and appended to `out` eight bytes at a time. `out` is
+/// incomplete until [`Bits::finish`] flushes the final zero-padded partial byte.
 pub(crate) struct Bits {
     out: KVec<u8>,
-    /// Pending bits, LSB-first, valid in the low `nacc`.
+    /// Pending bits, LSB-first, valid in the low `nacc`. Always `nacc < 64` between calls.
     acc: u64,
     nacc: u32,
     /// Which dialect of the shared unary code to emit; see [`Bits::unary`].
     coding: super::super::video_arm::CodeTables,
 }
 impl Bits {
-    pub(crate) fn new(coding: super::super::video_arm::CodeTables) -> Self {
+    /// A coder appending to `out` (normally empty, with capacity reserved by the caller).
+    pub(crate) fn over(out: KVec<u8>, coding: super::super::video_arm::CodeTables) -> Self {
         Self {
-            out: KVec::new(),
+            out,
             acc: 0,
             nacc: 0,
             coding,
         }
     }
 
-    /// Append one bit.
+    /// End the current coded region: flush its final zero-padded byte, then zero-pad the output
+    /// to an even length, so the next region starts there exactly as a fresh coder's would.
+    /// Returns the output length so far.
+    pub(crate) fn align_even(&mut self) -> Result<usize> {
+        let nbytes = self.nacc.div_ceil(8) as usize;
+        self.out
+            .extend_from_slice(&self.acc.to_le_bytes()[..nbytes], GFP_KERNEL)?;
+        (self.acc, self.nacc) = (0, 0);
+        let len = round_even(self.out.len());
+        self.out.resize(len, 0, GFP_KERNEL)?;
+        Ok(len)
+    }
+
+    /// Append the low `len` bits of `value`, least significant first. Bit `i` of `value` lands
+    /// exactly where the `i`th of `len` single-bit appends would.
     ///
-    /// `#[inline(always)]` because this is the codec's innermost operation -- `esc` calls it
-    /// once per unary, offset and sign bit. Out of line it costs a call, a return and a
-    /// reload/store of `acc`/`nacc` *per bit*; inlined, the accumulator stays in registers
-    /// across a run of bits. The eight-byte spill is deliberately left out of line so that
-    /// inlining stays cheap.
+    /// `value` must have no bits at or above `len`, and `len < 64`, so a word crosses at most one
+    /// accumulator boundary. `#[inline(always)]` keeps `acc`/`nacc` in registers across a run of
+    /// codes; the eight-byte spill stays out of line.
     #[inline(always)]
-    fn bit(&mut self, b: u32) -> Result {
-        self.acc |= ((b & 1) as u64) << self.nacc;
-        self.nacc += 1;
-        if self.nacc == 64 {
+    fn put(&mut self, value: u64, len: u32) -> Result {
+        debug_assert!(len < 64 && value >> len == 0);
+        let old = self.nacc;
+        self.acc |= value << old;
+        self.nacc = old + len;
+        if self.nacc >= 64 {
+            // `acc` now holds 64 complete bits; the `nacc - 64` that did not fit are the top of
+            // `value`. `old > 0` here because `len < 64`, so the shift is in range.
             self.spill()?;
+            self.acc = value >> (64 - old);
+            self.nacc = old + len - 64;
         }
         Ok(())
     }
 
-    /// Write the full accumulator out and reset it. Cold: once per 64 bits.
+    /// Write the full accumulator out. Cold: once per 64 bits. The caller resets `acc`/`nacc`.
     #[inline(never)]
     fn spill(&mut self) -> Result {
-        for k in 0..8 {
-            self.out.push((self.acc >> (8 * k)) as u8, GFP_KERNEL)?;
-        }
-        self.acc = 0;
-        self.nacc = 0;
+        self.out.extend_from_slice(&self.acc.to_le_bytes(), GFP_KERNEL)?;
         Ok(())
     }
 
     /// Flush the accumulator and yield the packed bytes, zero-padding the final byte.
     pub(crate) fn finish(mut self) -> Result<KVec<u8>> {
         let nbytes = self.nacc.div_ceil(8) as usize;
-        for k in 0..nbytes {
-            self.out.push((self.acc >> (8 * k)) as u8, GFP_KERNEL)?;
-        }
+        self.out
+            .extend_from_slice(&self.acc.to_le_bytes()[..nbytes], GFP_KERNEL)?;
         Ok(self.out)
     }
 
@@ -398,38 +495,38 @@ impl Bits {
     /// spelling is the same length, so emitting the wrong one produces records of exactly the
     /// right size that decode to noise -- and a flat strip cannot tell them apart, because its
     /// payload is all zeroes.
+    ///
+    /// Built as one word and appended with a single [`Bits::put`]; `count <= 16` keeps every
+    /// spelling (at most `2 * count + 1` bits) inside one `put`. Only the low `count` bits of
+    /// `payload` are coded.
+    #[inline(always)]
     fn unary(&mut self, count: u32, terminate: bool, payload: u32) -> Result {
-        match self.coding {
+        debug_assert!(count <= 16);
+        let term = u32::from(terminate);
+        let ones = (1u64 << count) - 1;
+        let word = match self.coding {
             super::super::video_arm::CodeTables::Wide => {
-                for _ in 0..count {
-                    self.bit(1)?;
-                }
-                if terminate {
-                    self.bit(0)?;
-                }
-                for i in (0..count).rev() {
-                    self.bit(payload >> i)?;
-                }
+                // The accumulator is LSB-first, so an MSB-first payload is its low `count` bits
+                // reversed. Reversing the whole u32 and shifting down also drops any higher bits.
+                let msb_first = u64::from(payload.reverse_bits()) >> (32 - count);
+                ones | msb_first << (count + term)
             }
             super::super::video_arm::CodeTables::Narrow => {
-                for i in 0..count {
-                    self.bit(1)?;
-                    self.bit(payload >> i)?;
-                }
-                if terminate {
-                    self.bit(0)?;
-                }
+                // Pairs (1, payload bit i): ones at even positions, the payload spread to odd.
+                spread_bits(ones as u32) | spread_bits(payload & ones as u32) << 1
             }
-        }
-        Ok(())
+        };
+        self.put(word, 2 * count + term)
     }
 
     /// The shared escape value code: a 0 is one `0` bit; else a category of `c` carrying
     /// `offset(c-1) ++ sign(1=positive)` as its payload. `c = bit_length(|v|)`.
+    ///
+    /// Branch-free: a zero is category 0, which [`Bits::unary`] spells as the lone terminator
+    /// `0` (no ones, no payload), so zeros and values take the same path. Coefficient signs and
+    /// zeros are unpredictable, and a branch on them mispredicts constantly.
+    #[inline(always)]
     pub(crate) fn esc(&mut self, v: i32, cmax: u32) -> Result {
-        if v == 0 {
-            return self.bit(0);
-        }
         // Saturate a magnitude whose category exceeds the codebook maximum (`cmax`) to the
         // largest value that category `cmax` encodes. This keeps the unary prefix at most
         // `cmax` ones: a decoder that stops after `cmax` ones (the max-category escape, whose
@@ -438,7 +535,9 @@ impl Bits {
         // unaffected; this only bounds the out-of-range case, which the recovered grammar does
         // not otherwise exercise.
         let c = mag_category(v).min(cmax);
-        let off = v.unsigned_abs().min((1 << c) - 1) - (1 << (c - 1));
+        // `top >> 1` is `1 << (c - 1)` for `c > 0`, and 0 for a zero, whose offset is then 0.
+        let top = 1u32 << c;
+        let off = v.unsigned_abs().min(top - 1) - (top >> 1);
         // The payload is the offset with the sign bit below it, which is `c` bits: an offset
         // spans `c - 1` bits at category `c`.
         self.unary(c, c < cmax, (off << 1) | u32::from(v > 0))
@@ -448,10 +547,9 @@ impl Bits {
     /// replaces. For `k=floor(log2(64-last))` the category is `k` and the payload the `k`-bit
     /// value `(64-2^k)-last`; a flat block is the maximum category with an all-zero payload,
     /// which is why it reads as one fixed-width code rather than a position.
-    fn sync_unit_after(&mut self, last: usize, skip: usize) -> Result {
-        for _ in skip..2 {
-            self.bit(0)?;
-        }
+    fn sync_unit_after(&mut self, last: usize, skip: u32) -> Result {
+        // The remaining root branches are zero bits ahead of the code.
+        self.put(0, 2 - skip)?;
         if last == 0 {
             self.unary(6, true, 0)
         } else {
@@ -465,6 +563,15 @@ impl Bits {
     fn sync_unit(&mut self, last: usize) -> Result {
         self.sync_unit_after(last, 0)
     }
+}
+/// Spread the low 16 bits of `v` to the even bit positions of the result (bit `i` -> bit `2i`).
+#[inline(always)]
+fn spread_bits(v: u32) -> u64 {
+    let mut x = u64::from(v & 0xffff);
+    x = (x | x << 8) & 0x00ff_00ff;
+    x = (x | x << 4) & 0x0f0f_0f0f;
+    x = (x | x << 2) & 0x3333_3333;
+    (x | x << 1) & 0x5555_5555
 }
 /// Chroma AC quantizer. Coarse bands 1/2 and 4..11 use step 16; coefficient 3 and positions
 /// 12..47 use step 32; the final HH band uses step 64. All use signed half-up rounding.
@@ -501,7 +608,7 @@ impl Bits {
                 self.sync_unit_after(ly, 1)
             }
             (false, true) => {
-                self.bit(0)?;
+                self.put(0, 1)?;
                 self.chroma_base(lcb)?;
                 self.sync_unit_after(ly, 2)
             }
@@ -531,12 +638,9 @@ impl Bits {
             (qcb, lcb, depth.chroma_ac_cmax()),
             (qy, ly, depth.ac_cmax()),
         ] {
-            for i in 1..=last {
-                if q[i] == 0 {
-                    self.bit(0)?;
-                } else {
-                    self.esc(q[i], cmax)?;
-                }
+            // An insignificant coefficient's run bit `0` is exactly `esc(0)`.
+            for &v in &q[1..=last] {
+                self.esc(v, cmax)?;
             }
         }
         Ok(())

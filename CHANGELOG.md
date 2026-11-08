@@ -4,6 +4,12 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+## [0.3.15] - 2026-11-08
+
+### Changed
+
+- Much lower CPU use during full-screen motion such as Exposé, desktop swipes, scrolling and video. Preparing, checking and compressing each frame now takes about a third of the processor time it did: in a benchmark of a 4K desktop scrolling at full speed, from about 41 ms to 14–15 ms of CPU per frame, and from about 11 ms to 4.5 ms end to end. The picture sent to the dock is exactly the same, byte for byte.
+
 ## [0.3.14] - 2026-11-06
 
 ### Fixed
@@ -153,7 +159,8 @@ First tester build, released as **DisplayLink Lite**.
 - A still screen stays clean, with no stale boxes or flickering patches: changed areas get a follow-up pass once the screen settles, and frames cycle through all three of the dock's buffers.
 - Heavy motion (for example App Exposé on two 4K monitors) does not reset the dock: video across both monitors is held to 100 MB/s.
 
-[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.14...HEAD
+[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.15...HEAD
+[0.3.15]: https://github.com/matthewrball/linklite/compare/v0.3.14...v0.3.15
 [0.3.14]: https://github.com/matthewrball/linklite/compare/v0.3.13...v0.3.14
 [0.3.13]: https://github.com/matthewrball/linklite/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/matthewrball/linklite/compare/v0.3.11...v0.3.12

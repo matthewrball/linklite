@@ -240,7 +240,7 @@ impl HeadScanout {
             }
         }
         let (dock, w_pad) = (self.dock, self.w_pad);
-        par_for_each_mut(&mut fresh, |_, (_, sx, sy, body)| {
+        par_for_each_mut(&mut fresh, crate::pool::threads(), |_, (_, sx, sy, body)| {
             *body = Some(kvino::encode_strip(dock, w_pad, rgb, *sx, *sy));
         });
         for (index, _, _, body) in fresh {
@@ -282,7 +282,7 @@ impl HeadScanout {
 
 /// Hash each strip of a packed RGB888 surface.
 ///
-/// Only change detection rests on this, so it is a cheap multiply-xor over 8-byte words with a
+/// Only change detection rests on this, so it is a cheap multiply-xor ([`StripHasher`]) with a
 /// position-dependent seed; the driver uses xxh64 for the same purpose. What matters is that two
 /// different strips of pixels are overwhelmingly unlikely to agree, and that a strip's own hash is
 /// stable across frames.
@@ -296,7 +296,7 @@ fn strip_hashes(
     let tiles_x = w_pad / strip_w;
     let tiles_y = h_pad / strip_h;
     let mut hashes = vec![0u64; tiles_x * tiles_y];
-    par_for_each_mut(&mut hashes, |i, out| {
+    par_for_each_mut(&mut hashes, crate::pool::STREAMING_THREADS, |i, out| {
         *out = strip_hash(rgb, w_pad, strip_w, strip_h, i % tiles_x, i / tiles_x);
     });
     hashes
@@ -328,7 +328,7 @@ fn strip_hashes_within(
     }
     let mut work: Vec<(usize, u64)> =
         (0..selected.len()).filter(|&i| selected[i]).map(|i| (i, 0)).collect();
-    par_for_each_mut(&mut work, |_, (i, out)| {
+    par_for_each_mut(&mut work, crate::pool::STREAMING_THREADS, |_, (i, out)| {
         *out = strip_hash(rgb, w_pad, strip_w, strip_h, *i % tiles_x, *i / tiles_x);
     });
     let mut hashes = previous.to_vec();
@@ -339,48 +339,73 @@ fn strip_hashes_within(
 }
 
 fn strip_hash(rgb: &[u8], w_pad: usize, strip_w: usize, strip_h: usize, tx: usize, ty: usize) -> u64 {
-    const PRIME: u64 = 0x9e37_79b1_85eb_ca87;
     let row = w_pad * 3;
     let span = strip_w * 3;
-    let mut h = PRIME ^ (tx as u64).rotate_left(17) ^ (ty as u64).rotate_left(43);
+    let mut h = StripHasher::new(StripHasher::PRIME ^ (tx as u64).rotate_left(17) ^ (ty as u64).rotate_left(43));
     for dy in 0..strip_h {
         let start = (ty * strip_h + dy) * row + tx * span;
-        let line = &rgb[start..start + span];
-        let mut chunks = line.chunks_exact(8);
-        for chunk in &mut chunks {
-            let word = u64::from_le_bytes(chunk.try_into().unwrap_or([0; 8]));
-            h = (h ^ word).wrapping_mul(PRIME).rotate_left(31);
-        }
-        for &byte in chunks.remainder() {
-            h = (h ^ u64::from(byte)).wrapping_mul(PRIME);
-        }
+        h.line(&rgb[start..start + span]);
     }
-    h
+    h.finish()
 }
 
-/// Below this many items a pass runs on the calling thread: spawning workers costs more than a
+/// Change-detection hash of a strip, fed one pixel line at a time. Local displaylink-lite patch.
+///
+/// Eight independent multiply-xor lanes take one 8-byte word each per 64-byte step and are
+/// folded together at the end, so their multiplies overlap instead of each waiting on the last
+/// (about 4x the single-chain rate on Apple Silicon; four lanes managed about 3x). A hash is only
+/// ever compared with another from this same hasher, seed and line split.
+pub struct StripHasher {
+    lanes: [u64; 8],
+}
+
+impl StripHasher {
+    pub const PRIME: u64 = 0x9e37_79b1_85eb_ca87;
+
+    pub fn new(seed: u64) -> Self {
+        // Distinct lane seeds, so equal data in different lanes hashes differently.
+        Self { lanes: core::array::from_fn(|i| seed ^ (i as u64).wrapping_mul(0xc2b2_ae3d_27d4_eb4f)) }
+    }
+
+    fn mix(h: u64, word: u64) -> u64 {
+        (h ^ word).wrapping_mul(Self::PRIME).rotate_left(31)
+    }
+
+    pub fn line(&mut self, line: &[u8]) {
+        let word = |bytes: &[u8]| u64::from_le_bytes(bytes.try_into().unwrap_or([0; 8]));
+        let mut steps = line.chunks_exact(64);
+        for step in &mut steps {
+            for (lane, bytes) in self.lanes.iter_mut().zip(step.chunks_exact(8)) {
+                *lane = Self::mix(*lane, word(bytes));
+            }
+        }
+        // At most seven whole words remain, one per lane, then at most seven bytes.
+        let mut words = steps.remainder().chunks_exact(8);
+        for (lane, bytes) in self.lanes.iter_mut().zip(&mut words) {
+            *lane = Self::mix(*lane, word(bytes));
+        }
+        for &byte in words.remainder() {
+            self.lanes[0] = (self.lanes[0] ^ u64::from(byte)).wrapping_mul(Self::PRIME);
+        }
+    }
+
+    pub fn finish(&self) -> u64 {
+        self.lanes[1..].iter().fold(self.lanes[0], |h, &lane| Self::mix(h, lane))
+    }
+}
+
+/// Below this many items a pass runs on the calling thread: waking workers costs more than a
 /// small damage region takes to encode.
 const PARALLEL_MIN_ITEMS: usize = 64;
 
-/// Run `f(index, item)` over `items`, split into contiguous runs across the machine's cores.
+/// Run `f(index, item)` over `items` on at most `threads` threads of the shared worker pool.
 /// Local displaylink-lite patch; see vendor/vino/UPSTREAM.md.
-fn par_for_each_mut<T: Send>(items: &mut [T], f: impl Fn(usize, &mut T) + Sync) {
-    let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
-    if workers < 2 || items.len() < PARALLEL_MIN_ITEMS {
+fn par_for_each_mut<T: Send>(items: &mut [T], threads: usize, f: impl Fn(usize, &mut T) + Sync) {
+    if items.len() < PARALLEL_MIN_ITEMS {
         items.iter_mut().enumerate().for_each(|(i, item)| f(i, item));
         return;
     }
-    let run = items.len().div_ceil(workers);
-    let f = &f;
-    std::thread::scope(|scope| {
-        for (n, chunk) in items.chunks_mut(run).enumerate() {
-            scope.spawn(move || {
-                for (offset, item) in chunk.iter_mut().enumerate() {
-                    f(n * run + offset, item);
-                }
-            });
-        }
-    });
+    crate::pool::for_each_mut(items, threads, f);
 }
 
 /// Turn the strips that still owe a transmission into tile-aligned damage rectangles.
@@ -663,6 +688,30 @@ mod tests {
         head.plan(128, 32, &surface(128, 32, 0x20));
         head.presented(&Plan::Keyframe);
         assert_eq!(head.plan(192, 32, &surface(192, 32, 0x20)), Plan::Keyframe);
+    }
+
+    /// Local displaylink-lite patch: the lane-split hasher still sees every byte and its place.
+    #[test]
+    fn strip_hasher_notices_any_byte_and_any_line_swap() {
+        let hash = |lines: &[&[u8]]| {
+            let mut h = StripHasher::new(StripHasher::PRIME);
+            lines.iter().for_each(|line| h.line(line));
+            h.finish()
+        };
+        for len in [0usize, 1, 7, 8, 9, 63, 64, 65, 127, 192, 200] {
+            let a: Vec<u8> = (0..len).map(|i| (i * 31 + 7) as u8).collect();
+            let b: Vec<u8> = (0..len).map(|i| (i * 17 + 3) as u8).collect();
+            let base = hash(&[&a, &b]);
+            assert_eq!(base, hash(&[&a, &b]), "len {len}");
+            if len > 0 {
+                assert_ne!(base, hash(&[&b, &a]), "len {len}");
+            }
+            for i in 0..len {
+                let mut flipped = a.clone();
+                flipped[i] ^= 0x40;
+                assert_ne!(base, hash(&[&flipped, &b]), "len {len} byte {i}");
+            }
+        }
     }
 
     #[test]

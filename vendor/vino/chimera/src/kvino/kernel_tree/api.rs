@@ -633,17 +633,86 @@ fn rgb_reader(
     width: usize,
     rgb: &[u8],
 ) -> impl FnMut(usize, usize) -> (u16, u16, u16) + '_ {
-    let widen = move |v: u8| -> u16 {
-        let v = u16::from(v);
-        if ten_bit {
-            (v << 2) | (v >> 6)
-        } else {
-            v
-        }
-    };
     move |x, y| {
         let i = (y * width + x) * 3;
-        (widen(rgb[i]), widen(rgb[i + 1]), widen(rgb[i + 2]))
+        (
+            widen(ten_bit, rgb[i]),
+            widen(ten_bit, rgb[i + 1]),
+            widen(ten_bit, rgb[i + 2]),
+        )
+    }
+}
+
+/// One packed 8-bit channel as a sample of the link's depth; see [`rgb_reader`].
+#[inline(always)]
+fn widen(ten_bit: bool, v: u8) -> u16 {
+    let v = u16::from(v);
+    if ten_bit {
+        (v << 2) | (v >> 6)
+    } else {
+        v
+    }
+}
+
+/// [`rgb_reader`] for the strip encoder, eight pixels at a time: one address computation and
+/// one range check per run of pixels rather than per pixel. The samples are exactly
+/// `rgb_reader`'s.
+struct RgbRows<'a> {
+    ten_bit: bool,
+    width: usize,
+    rgb: &'a [u8],
+}
+impl video::haar::PixelRows for RgbRows<'_> {
+    #[inline(always)]
+    fn row8(&mut self, x: usize, y: usize, out: &mut [[i32; 8]; 3]) {
+        let i = (y * self.width + x) * 3;
+        let run: &[u8; 24] = self.rgb[i..i + 24].try_into().expect("a 24-byte range");
+        #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+        rgb_row8_neon(self.ten_bit, run, out);
+        #[cfg(not(all(target_arch = "aarch64", target_feature = "neon")))]
+        rgb_row8_scalar(self.ten_bit, run, out);
+    }
+}
+
+/// Eight packed RGB pixels split into widened channels.
+#[cfg_attr(
+    all(target_arch = "aarch64", target_feature = "neon"),
+    allow(dead_code)
+)]
+#[inline(always)]
+fn rgb_row8_scalar(ten_bit: bool, run: &[u8; 24], out: &mut [[i32; 8]; 3]) {
+    for c in 0..8 {
+        for ch in 0..3 {
+            out[ch][c] = widen(ten_bit, run[3 * c + ch]).into();
+        }
+    }
+}
+
+/// [`rgb_row8_scalar`] with one de-interleaving load (`ld3`) and lane-wise widening.
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+#[inline(always)]
+fn rgb_row8_neon(ten_bit: bool, run: &[u8; 24], out: &mut [[i32; 8]; 3]) {
+    use core::arch::aarch64::{
+        uint16x8_t, vget_low_u16, vld3_u8, vmovl_high_u16, vmovl_u16, vmovl_u8, vorrq_u16,
+        vreinterpretq_s32_u32, vshlq_n_u16, vshrq_n_u16, vst1q_s32,
+    };
+    // SAFETY: NEON is enabled for the whole build (the `cfg` above); `vld3_u8` reads exactly
+    // the 24 bytes of `run`, and each store writes 4 lanes at 0 or 4 of an 8-lane row.
+    unsafe {
+        let lanes = vld3_u8(run.as_ptr());
+        let widen = |v: uint16x8_t| {
+            if ten_bit {
+                vorrq_u16(vshlq_n_u16::<2>(v), vshrq_n_u16::<6>(v))
+            } else {
+                v
+            }
+        };
+        for (ch, v) in [lanes.0, lanes.1, lanes.2].into_iter().enumerate() {
+            let v = widen(vmovl_u8(v));
+            let row = out[ch].as_mut_ptr();
+            vst1q_s32(row, vreinterpretq_s32_u32(vmovl_u16(vget_low_u16(v))));
+            vst1q_s32(row.add(4), vreinterpretq_s32_u32(vmovl_high_u16(v)));
+        }
     }
 }
 
@@ -711,7 +780,11 @@ pub fn encode_strip(
     sx: usize,
     sy: usize,
 ) -> Result<Vec<u8>> {
-    let mut px = rgb_reader(dock.ten_bit, width, rgb);
+    let mut px = RgbRows {
+        ten_bit: dock.ten_bit,
+        width,
+        rgb,
+    };
     Ok(video::haar::colour_strip_at(dock.geometry(), sx, sy, &mut px)?.into_vec())
 }
 
@@ -1623,5 +1696,228 @@ mod production_builders {
             probe_reply_status(&key, &riv, &frame),
             Some((0x78, 0x1234, true))
         );
+    }
+
+    /// Small deterministic generator for the codec equivalence tests.
+    fn xorshift(mut seed: u64) -> impl FnMut() -> u64 {
+        move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        }
+    }
+
+    /// The strip encoder's eight-pixel reader yields exactly the per-pixel `rgb_reader`'s
+    /// samples at both depths, for every byte value, at odd offsets and at the very end of the
+    /// buffer.
+    #[test]
+    fn rgb_rows_match_rgb_reader() {
+        use video::haar::PixelRows;
+        // Every byte value in every channel position, in an odd-width buffer.
+        let (width, height) = (37, 9);
+        let rgb: Vec<u8> = (0..width * height * 3)
+            .map(|i| (i * 7 % 256) as u8)
+            .collect();
+        for ten_bit in [false, true] {
+            let mut px = rgb_reader(ten_bit, width, &rgb);
+            let mut rows = RgbRows {
+                ten_bit,
+                width,
+                rgb: &rgb,
+            };
+            for y in 0..height {
+                // The last row's final run ends exactly at the end of the buffer.
+                for x in [0, 1, 5, 13, width - 8] {
+                    let mut got = [[0; 8]; 3];
+                    rows.row8(x, y, &mut got);
+                    let mut want = [[0; 8]; 3];
+                    let run = &rgb[(y * width + x) * 3..][..24];
+                    rgb_row8_scalar(ten_bit, run.try_into().unwrap(), &mut want);
+                    assert_eq!(got, want);
+                    for c in 0..8 {
+                        let (r, g, b) = px(x + c, y);
+                        assert_eq!([got[0][c], got[1][c], got[2][c]], [r, g, b].map(i32::from));
+                    }
+                }
+            }
+        }
+    }
+
+    /// The vector Haar transform (where the target has one) yields exactly the portable one's
+    /// coefficients, including floor division of negative values and the extremes of the
+    /// colour transform's range at 10 bits.
+    #[test]
+    fn haar_transform_matches_scalar() {
+        use video::haar::{transform, transform_scalar};
+        // |Y| reaches 64 * (1023 + 511) and |Cb|, |Cr| 64 * 1023; step past both.
+        let hi = 64 * 1023 * 2;
+        let mut blocks: Vec<[i32; 64]> = vec![[0; 64], [hi; 64], [-hi; 64], [-1; 64]];
+        blocks.push(core::array::from_fn(|i| if i % 2 == 0 { hi } else { -hi }));
+        blocks.push(core::array::from_fn(|i| {
+            if (i / 8) % 2 == 0 {
+                hi
+            } else {
+                -hi
+            }
+        }));
+        blocks.push(core::array::from_fn(|i| (i as i32 * 977) - 31_000));
+        // A single non-zero sample at every position, odd and negative so every shift floors.
+        for p in 0..64 {
+            for v in [hi, -hi, 63, -65] {
+                let mut b = [0; 64];
+                b[p] = v;
+                blocks.push(b);
+            }
+        }
+        let mut next = xorshift(0x9e37_79b9_7f4a_7c15);
+        for _ in 0..20_000 {
+            blocks.push(core::array::from_fn(|_| {
+                (next() % (2 * hi as u64 + 1)) as i32 - hi
+            }));
+        }
+        for b in &blocks {
+            assert_eq!(transform(b), transform_scalar(b), "block {b:?}");
+        }
+    }
+
+    /// The word-at-a-time coder emits exactly the bits the one-bit-at-a-time definition does,
+    /// for both code tables and at every accumulator alignment (so codes straddle the spill).
+    #[test]
+    fn haar_word_coder_matches_bitwise_reference() -> Result {
+        use video::haar::{mag_category, Bits, Depth};
+        use video_arm::CodeTables;
+        fn unary(r: &mut Vec<u8>, coding: CodeTables, count: u32, term: bool, payload: u32) {
+            match coding {
+                CodeTables::Wide => {
+                    r.extend((0..count).map(|_| 1));
+                    r.extend(term.then_some(0));
+                    r.extend((0..count).rev().map(|i| (payload >> i) as u8 & 1));
+                }
+                CodeTables::Narrow => {
+                    for i in 0..count {
+                        r.extend([1, (payload >> i) as u8 & 1]);
+                    }
+                    r.extend(term.then_some(0));
+                }
+            }
+        }
+        fn esc(r: &mut Vec<u8>, coding: CodeTables, v: i32, cmax: u32) {
+            if v == 0 {
+                return r.push(0);
+            }
+            let c = mag_category(v).min(cmax);
+            let off = v.unsigned_abs().min((1 << c) - 1) - (1 << (c - 1));
+            unary(r, coding, c, c < cmax, (off << 1) | u32::from(v > 0));
+        }
+        fn sync_after(r: &mut Vec<u8>, coding: CodeTables, last: usize, skip: usize) {
+            r.extend((skip..2).map(|_| 0));
+            if last == 0 {
+                unary(r, coding, 6, true, 0);
+            } else {
+                let k = usize::BITS - 1 - (64 - last).leading_zeros();
+                unary(r, coding, k, true, (64 - (1 << k) - last) as u32);
+            }
+        }
+        fn chroma(r: &mut Vec<u8>, coding: CodeTables, last: usize) {
+            let c = usize::BITS - 1 - (last + 1).leading_zeros();
+            unary(r, coding, c, true, (last - ((1 << c) - 1)) as u32);
+        }
+        fn check(coder: Bits, want: &[u8]) -> Result {
+            let got = coder.finish()?;
+            assert_eq!(got.len(), want.len().div_ceil(8));
+            for (i, &b) in want.iter().enumerate() {
+                assert_eq!((got[i / 8] >> (i % 8)) & 1, b, "bit {i}");
+            }
+            Ok(())
+        }
+        let mut values: Vec<i32> = (-300..=300).collect();
+        for c in 9..14 {
+            values.extend([1 << c, (1 << c) - 1, -(1 << c), 1 - (1 << c), 3 << (c - 1)]);
+        }
+        let mut next = xorshift(0x2545_f491_4f6c_dd1d);
+        for coding in [CodeTables::Wide, CodeTables::Narrow] {
+            for lead in 0..64 {
+                // `lead` single-bit zero escapes put each code at every alignment.
+                let start = |want: &mut Vec<u8>| -> Result<Bits> {
+                    let mut coder = Bits::over(KVec::new(), coding);
+                    for _ in 0..lead {
+                        coder.esc(0, 10)?;
+                        want.push(0);
+                    }
+                    Ok(coder)
+                };
+                for cmax in [9, 10, 11, 12] {
+                    let mut want = Vec::new();
+                    let mut coder = start(&mut want)?;
+                    for &v in &values {
+                        coder.esc(v, cmax)?;
+                        esc(&mut want, coding, v, cmax);
+                    }
+                    check(coder, &want)?;
+                }
+                let mut want = Vec::new();
+                let mut coder = start(&mut want)?;
+                for lcr in [0, 1, 2, 7, 40, 63] {
+                    for lcb in [0, 1, 3, 15, 62, 63] {
+                        for ly in [0, 1, 31, 32, 33, 48, 63] {
+                            coder.colour_sync_unit(lcr, lcb, ly)?;
+                            match (lcr != 0, lcb != 0) {
+                                (false, false) => sync_after(&mut want, coding, ly, 0),
+                                (true, false) => {
+                                    chroma(&mut want, coding, lcr);
+                                    sync_after(&mut want, coding, ly, 1);
+                                }
+                                (false, true) => {
+                                    want.push(0);
+                                    chroma(&mut want, coding, lcb);
+                                    sync_after(&mut want, coding, ly, 2);
+                                }
+                                (true, true) => {
+                                    chroma(&mut want, coding, lcr);
+                                    chroma(&mut want, coding, lcb);
+                                    sync_after(&mut want, coding, ly, 2);
+                                }
+                            }
+                        }
+                    }
+                }
+                check(coder, &want)?;
+                // AC runs: sparse planes with zero runs of every length, including none.
+                let mut want = Vec::new();
+                let mut coder = start(&mut want)?;
+                for _ in 0..8 {
+                    let mut q = [[0i32; 64]; 3];
+                    let mut last = [0usize; 3];
+                    for (p, plane) in q.iter_mut().enumerate() {
+                        let density = next() % 64;
+                        for i in 1..64 {
+                            if next() % 64 < density {
+                                plane[i] = (next() % 1201) as i32 - 600;
+                            }
+                        }
+                        last[p] = (1..64).rev().find(|&i| plane[i] != 0).unwrap_or(0);
+                    }
+                    let depth = if lead % 2 == 0 {
+                        Depth::Eight
+                    } else {
+                        Depth::Ten
+                    };
+                    coder.colour_block_ac(&q[0], &q[1], &q[2], last[0], last[1], last[2], depth)?;
+                    let cmax = [
+                        depth.chroma_ac_cmax(),
+                        depth.chroma_ac_cmax(),
+                        depth.ac_cmax(),
+                    ];
+                    for p in 0..3 {
+                        for i in 1..=last[p] {
+                            esc(&mut want, coding, q[p][i], cmax[p]);
+                        }
+                    }
+                }
+                check(coder, &want)?;
+            }
+        }
+        Ok(())
     }
 }
