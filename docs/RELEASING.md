@@ -67,6 +67,12 @@ For the exact staged bytes:
 
 After the public feed change is merged, confirm the intended entry is reachable through the default feed and the actual updater offers and installs it on the approved test installation. Record this separately from cryptographic verification; until exercised it remains pending. This default-feed check cannot run before the new entry is published. Qualify the isolated candidate updater before promotion instead.
 
+## Download statistics
+
+`python3 scripts/download-stats.py` prints each release's download counts (the DMG or zip, and the source archive) and, with the owner's `gh` login, the last 14 days of repository views and clones. Counts are GitHub's all-time totals per release asset. They include automatic updates, because Sparkle downloads the same release DMG, and manual re-downloads such as the hash checks in [Validate before publishing the feed](#validate-before-publishing-the-feed), about one per asset per release. Update-feed checks are not counted: the appcast is served from `raw.githubusercontent.com`, which reports nothing.
+
+The `Download stats` workflow runs daily (and on demand from the Actions tab) and records a snapshot on the `stats` branch: `downloads.csv` (one row per asset per day) and `traffic.csv` (one row per day). GitHub keeps traffic for 14 days only, so the daily record is the history. Traffic needs push-level access: add a fine-grained token with read-only **Administration** permission for this repository as the `STATS_TOKEN` Actions secret to record it; without it the workflow records downloads only.
+
 ## Safe recovery and forward fixes
 
 If validation fails before feed publication, stop: leave the public feed unchanged, correct the source and produce a new uniquely versioned candidate. Do not upload a replacement over already public signed bytes.
