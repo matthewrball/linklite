@@ -4,6 +4,10 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Changed
+
+- Much lower CPU use during full-screen motion such as Exposé, desktop swipes, scrolling and video. Preparing, checking and compressing each frame now takes about a third of the processor time it did: in a benchmark of a 4K desktop scrolling at full speed, from about 41 ms to 14–15 ms of CPU per frame, and from about 11 ms to 4.5 ms end to end. The picture sent to the dock is exactly the same, byte for byte.
+
 ## [0.3.14] - 2026-11-06
 
 ### Fixed

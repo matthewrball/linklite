@@ -217,8 +217,12 @@ pub(crate) const DIM_SHIFT: u32 = 3;
 pub(crate) fn round_even(n: usize) -> usize {
     n + (n & 1)
 }
+/// Starting capacity of the buffer a strip is coded into: enough for all but busy strips, so
+/// the buffer rarely grows mid-strip.
+const STRIP_SCRATCH: usize = 1024;
 /// One quantized colour block: the three planes' 64 coefficients and exact last-significant
 /// AC positions. Built by [`colour_block`] from a block's per-plane samples.
+#[derive(Clone)]
 pub(crate) struct ColourBlock {
     pub(crate) qcr: [i32; COEFFS],
     pub(crate) qcb: [i32; COEFFS],
@@ -227,9 +231,22 @@ pub(crate) struct ColourBlock {
     pub(crate) lcb: usize,
     pub(crate) ly: usize,
 }
+impl ColourBlock {
+    /// An all-zero block, for [`colour_block_into`] to overwrite.
+    pub(crate) const fn zeroed() -> Self {
+        Self {
+            qcr: [0; COEFFS],
+            qcb: [0; COEFFS],
+            qy: [0; COEFFS],
+            lcr: 0,
+            lcb: 0,
+            ly: 0,
+        }
+    }
+}
 /// Return the exact chroma AC extent.
-/// Only the KUnit tests call this now: `colour_block` folds the same search into the pass that
-/// writes the coefficients, so the production path never scans them a second time.
+/// Only the KUnit tests call this now: `colour_block` computes the same extent branch-free with
+/// [`last_significant`].
 #[cfg(CONFIG_DRM_VINO_KUNIT_TEST)]
 pub(crate) fn chroma_last(q: &[i32; COEFFS]) -> usize {
     (1..COEFFS).rev().find(|&i| q[i] != 0).unwrap_or(0)
@@ -246,52 +263,200 @@ pub(crate) fn colour_block(
     cb: &[i32; PIXELS],
     y: &[i32; PIXELS],
 ) -> ColourBlock {
+    let mut block = ColourBlock::zeroed();
+    colour_block_into(cr, cb, y, &mut block);
+    block
+}
+/// [`colour_block`] written into `block`, overwriting every field. The frame encoder reuses one
+/// block per strip this way instead of zeroing a fresh one and copying it out for every block.
+#[inline(never)]
+pub(crate) fn colour_block_into(
+    cr: &[i32; PIXELS],
+    cb: &[i32; PIXELS],
+    y: &[i32; PIXELS],
+    block: &mut ColourBlock,
+) {
     // Do not reach for SIMD here. An AVX2 in-block Haar is byte-exact but parity-to-slower
     // once `kernel_fpu_begin`/`end` are paid per block, costing about 18% more CPU on a live
     // encode. A strip is ~72% entropy coder, which is bit-serial, so even a free transform
     // caps the whole win near 23%.
     let (tcr, tcb, ty) = (transform(cr), transform(cb), transform(y));
-    // Quantise all three planes and find each one's last significant coefficient in a single
-    // pass. Folding the search into the write avoids three further 63-element reverse scans
-    // ([`chroma_last`]) over arrays just written, and keeps the three planes in cache together.
-    //
-    // An explicit ascending loop rather than `core::array::from_fn`: the fold depends on the
-    // index order, and `from_fn` does not document one. Every element is written, so the zero
-    // initialiser costs nothing.
-    let mut qcr = [0i32; COEFFS];
-    let mut qcb = [0i32; COEFFS];
-    let mut qy = [0i32; COEFFS];
-    let (mut lcr, mut lcb, mut ly) = (0usize, 0usize, 0usize);
-    qcr[0] = quantize_dc_round(2, tcr[0]);
-    qcb[0] = quantize_dc_round(1, tcb[0]);
-    qy[0] = quantize_dc_round(0, ty[0]);
-    // Coefficient 0 is deliberately excluded: the last-significant index is over 1..COEFFS.
-    for i in 1..COEFFS {
-        let (vcr, vcb, vy) = (
-            quantize_chroma_ac(tcr[i], i),
-            quantize_chroma_ac(tcb[i], i),
-            quantize(ty[i], i),
-        );
-        if vcr != 0 {
-            lcr = i;
-        }
-        if vcb != 0 {
-            lcb = i;
-        }
-        if vy != 0 {
-            ly = i;
-        }
-        qcr[i] = vcr;
-        qcb[i] = vcb;
-        qy[i] = vy;
+    // Quantise band by band. Each band's steps are constants here, so each loop is a fixed
+    // shift with no per-coefficient table load or rounding-mode branch, and vectorises where
+    // the target allows it. The constants restate `quantize`'s and `quantize_chroma_ac`'s
+    // tables; `quant_luma`/`quant_chroma` assert they agree with them in debug builds.
+    // Together the bands cover every position, so every coefficient is overwritten.
+    block.lcr = quant_chroma_plane(&tcr, &mut block.qcr);
+    block.lcb = quant_chroma_plane(&tcb, &mut block.qcb);
+    block.ly = quant_luma_plane(&ty, &mut block.qy);
+}
+/// Quantise one chroma plane (DC step 64, AC `quantize_chroma_ac`); returns its last
+/// significant AC position. Bands are `<first, end, shift>`.
+#[inline(always)]
+fn quant_chroma_plane(t: &[i32; COEFFS], q: &mut [i32; COEFFS]) -> usize {
+    q[0] = quantize_dc_round(1, t[0]);
+    quant_chroma::<1, 3, 4>(t, q);
+    quant_chroma::<3, 4, 5>(t, q);
+    quant_chroma::<4, 12, 4>(t, q);
+    quant_chroma::<12, 48, 5>(t, q);
+    quant_chroma::<48, 64, 6>(t, q);
+    last_significant(q)
+}
+/// Quantise the luma plane (DC step 16, AC `quantize`); returns its last significant AC
+/// position. Bands are `<first, end, shift, bias>`; a zero bias truncates towards zero.
+#[inline(always)]
+fn quant_luma_plane(t: &[i32; COEFFS], q: &mut [i32; COEFFS]) -> usize {
+    q[0] = quantize_dc_round(0, t[0]);
+    quant_luma::<1, 3, 4, 8>(t, q);
+    quant_luma::<3, 4, 5, 16>(t, q);
+    quant_luma::<4, 12, 2, 2>(t, q);
+    quant_luma::<12, 16, 3, 4>(t, q);
+    quant_luma::<16, 48, 1, 0>(t, q);
+    quant_luma::<48, 64, 2, 2>(t, q);
+    last_significant(q)
+}
+/// `quantize_chroma_ac` over `LO..HI`, where every position has shift `S`.
+#[inline(always)]
+fn quant_chroma<const LO: usize, const HI: usize, const S: u32>(
+    t: &[i32; COEFFS],
+    q: &mut [i32; COEFFS],
+) {
+    for (i, (q, &t)) in q[LO..HI].iter_mut().zip(&t[LO..HI]).enumerate() {
+        *q = (t + (1 << (S - 1))) >> S;
+        debug_assert_eq!(*q, quantize_chroma_ac(t, LO + i));
     }
-    ColourBlock {
-        qcr,
-        qcb,
-        qy,
-        lcr,
-        lcb,
-        ly,
+}
+/// `quantize` over `LO..HI`, where every position has `(shift, bias) == (S, B)`.
+#[inline(always)]
+fn quant_luma<const LO: usize, const HI: usize, const S: u32, const B: i32>(
+    t: &[i32; COEFFS],
+    q: &mut [i32; COEFFS],
+) {
+    for (i, (q, &t)) in q[LO..HI].iter_mut().zip(&t[LO..HI]).enumerate() {
+        let v = if B == 0 {
+            // Truncate towards zero.
+            let m = t.abs() >> S;
+            if t < 0 {
+                -m
+            } else {
+                m
+            }
+        } else {
+            (t + B) >> S
+        };
+        *q = v.clamp(-2048, 2047);
+        debug_assert_eq!(*q, quantize(t, LO + i));
+    }
+}
+/// The last significant AC position (`1..COEFFS`), or 0 when every AC coefficient is zero.
+///
+/// A branch-free max over `i` where `q[i] != 0` rather than an early-exit reverse scan, so it
+/// vectorises where the target allows. Position 0 (the DC) only ever contributes 0.
+#[inline(always)]
+fn last_significant(q: &[i32; COEFFS]) -> usize {
+    let mut last = 0u32;
+    for (i, &v) in (0u32..).zip(q) {
+        last = last.max(if v != 0 { i } else { 0 });
+    }
+    last as usize
+}
+/// Codes one strip a block at a time, so the frame encoder never holds all sixteen quantized
+/// blocks at once.
+///
+/// A strip is a 16-byte header and three byte-aligned coded regions: main (every block's
+/// significance tree, then every block's DC deltas), row0 (AC of blocks 0..8) and row1 (AC of
+/// blocks 8..16), each zero-padded to an even length, with two extra zero bytes after main.
+/// Rows are coded as blocks arrive, in block order, into one scratch buffer; main needs only
+/// each block's three last positions and three DCs, which are kept until [`StripCoder::finish`].
+struct StripCoder {
+    geometry: Geometry,
+    /// Row0 then row1, then (in [`StripCoder::finish`]) main, in one scratch buffer.
+    bits: Bits,
+    /// Byte length of row0 including its padding, once row1 has begun.
+    row0_len: usize,
+    /// Per block `(lcr, lcb, ly)` and `(Cr, Cb, Y)` DC, in block order.
+    lasts: [(usize, usize, usize); STRIP_BLOCKS],
+    dcs: [(i32, i32, i32); STRIP_BLOCKS],
+    n: usize,
+}
+impl StripCoder {
+    fn new(geometry: Geometry) -> Result<Self> {
+        let scratch = KVec::with_capacity(STRIP_SCRATCH, GFP_KERNEL)?;
+        Ok(Self {
+            geometry,
+            bits: Bits::over(scratch, geometry.coding()),
+            row0_len: 0,
+            lasts: [(0, 0, 0); STRIP_BLOCKS],
+            dcs: [(0, 0, 0); STRIP_BLOCKS],
+            n: 0,
+        })
+    }
+
+    /// Code the next block (raster order: 0..8 top 8-px half, 8..16 bottom).
+    fn push(&mut self, b: &ColourBlock) -> Result {
+        if self.n == STRIP_BLOCKS {
+            return Err(kernel::error::code::EINVAL);
+        }
+        if self.n == STRIP_ROW_BLOCKS {
+            // Row0 is complete: pad it and start row1 byte-aligned after it.
+            self.row0_len = self.bits.align_even()?;
+        }
+        self.bits.colour_block_ac(
+            &b.qcr,
+            &b.qcb,
+            &b.qy,
+            b.lcr,
+            b.lcb,
+            b.ly,
+            self.geometry.depth(),
+        )?;
+        self.lasts[self.n] = (b.lcr, b.lcb, b.ly);
+        self.dcs[self.n] = (b.qcr[0], b.qcb[0], b.qy[0]);
+        self.n += 1;
+        Ok(())
+    }
+
+    /// Code main after the rows in the scratch, then lay out the exactly sized strip body.
+    fn finish(mut self, x: u16, y: u16) -> Result<KVec<u8>> {
+        if self.n != STRIP_BLOCKS {
+            return Err(kernel::error::code::EINVAL);
+        }
+        let rows_len = self.bits.align_even()?;
+        for &(lcr, lcb, ly) in &self.lasts {
+            self.bits.colour_sync_unit(lcr, lcb, ly)?;
+        }
+        let dc_cmax = self.geometry.depth().dc_cmax();
+        let (mut pcr, mut pcb, mut py) = (0i32, 0i32, 0i32);
+        for &(cr, cb, yv) in &self.dcs {
+            self.bits.esc(cr - pcr, dc_cmax)?;
+            self.bits.esc(cb - pcb, dc_cmax)?;
+            self.bits.esc(yv - py, dc_cmax)?;
+            (pcr, pcb, py) = (cr, cb, yv);
+        }
+        let scratch = self.bits.finish()?;
+        let (rows, main) = scratch.split_at(rows_len);
+        let w18 = 16 + round_even(main.len()) + 2;
+        let w1c = w18 + self.row0_len;
+        // The 2-byte tail overlaps the end of the row1 region (len = w1c + round_even(row1)).
+        let len = w18 + rows_len;
+
+        // Bodies are cached by the scanout for every strip on screen, so allocate exactly.
+        let mut out = KVec::with_capacity(len, GFP_KERNEL)?;
+        out.resize(16, 0, GFP_KERNEL)?;
+        out[0] = 0x01;
+        out[1] = 0x28;
+        out[2..4].copy_from_slice(&x.to_le_bytes());
+        // Strip y is the band's top edge.
+        out[4..6].copy_from_slice(&y.to_le_bytes());
+        out[10..12].copy_from_slice(&(w18 as u16).to_le_bytes());
+        out[12..14].copy_from_slice(&(w1c as u16).to_le_bytes());
+        out.extend_from_slice(main, GFP_KERNEL)?;
+        out.resize(w18, 0, GFP_KERNEL)?;
+        out.extend_from_slice(rows, GFP_KERNEL)?;
+        // No forward-hint tail: on the EP08 wire the strip's last 2 bytes are the natural row1
+        // bit-packing. The record framing carries the length as `strip_id == len`, so the
+        // in-strip echo the sink hook showed is not transmitted on the wire. See `frame_records`.
+        Ok(out)
     }
 }
 /// Encode one 64x16 COLOUR strip at pixel `(x, y)` from its 16 quantized colour blocks
@@ -305,98 +470,84 @@ pub(crate) fn colour_strip(
     x: u16,
     y: u16,
 ) -> Result<KVec<u8>> {
-    let dc_cmax = geometry.depth().dc_cmax();
-    let coding = geometry.coding();
-    let mut main = Bits::new(coding);
+    let mut coder = StripCoder::new(geometry)?;
     for b in blocks {
-        main.colour_sync_unit(b.lcr, b.lcb, b.ly)?;
+        coder.push(b)?;
     }
-    let (mut pcr, mut pcb, mut py) = (0i32, 0i32, 0i32);
-    for b in blocks {
-        let (cr, cb, yv) = (b.qcr[0], b.qcb[0], b.qy[0]);
-        main.esc(cr - pcr, dc_cmax)?;
-        main.esc(cb - pcb, dc_cmax)?;
-        main.esc(yv - py, dc_cmax)?;
-        (pcr, pcb, py) = (cr, cb, yv);
-    }
-    let mut row0 = Bits::new(coding);
-    for b in &blocks[..STRIP_ROW_BLOCKS] {
-        row0.colour_block_ac(&b.qcr, &b.qcb, &b.qy, b.lcr, b.lcb, b.ly, geometry.depth())?;
-    }
-    let mut row1 = Bits::new(coding);
-    for b in &blocks[STRIP_ROW_BLOCKS..] {
-        row1.colour_block_ac(&b.qcr, &b.qcb, &b.qy, b.lcr, b.lcb, b.ly, geometry.depth())?;
-    }
-
-    // `Bits` buffers into a word, so `out` is only complete once finished -- take all three
-    // before any length is read.
-    let (main, row0, row1) = (main.finish()?, row0.finish()?, row1.finish()?);
-    let r0 = round_even(row0.len());
-    let r1 = round_even(row1.len());
-    let main_b = round_even(main.len()) + 2;
-    let w18 = 16 + main_b;
-    let w1c = w18 + r0;
-    // The 2-byte tail overlaps the end of the row1 region (len = w1c + round_even(row1)).
-    let len = w1c + r1;
-
-    let mut out = KVec::new();
-    out.resize(len, 0, GFP_KERNEL)?;
-    out[0] = 0x01;
-    out[1] = 0x28;
-    out[2..4].copy_from_slice(&x.to_le_bytes());
-    // Strip y is the band's top edge.
-    out[4..6].copy_from_slice(&y.to_le_bytes());
-    out[10..12].copy_from_slice(&(w18 as u16).to_le_bytes());
-    out[12..14].copy_from_slice(&(w1c as u16).to_le_bytes());
-    out[16..16 + main.len()].copy_from_slice(&main);
-    out[w18..w18 + row0.len()].copy_from_slice(&row0);
-    out[w1c..w1c + row1.len()].copy_from_slice(&row1);
-    // No forward-hint tail: on the EP08 wire the strip's last 2 bytes are the natural row1
-    // bit-packing. The record framing carries the length as `strip_id == len`, so the in-strip
-    // echo the sink hook showed is not transmitted on the wire. See `frame_records`.
-    Ok(out)
+    coder.finish(x, y)
 }
-/// Gather one 64x16 strip's 16 colour blocks from a pixel source. `px(x, y)` returns the
-/// 8-bit `(R, G, B)` at absolute frame coordinate `(x, y)`; `(ox, oy)` is the strip's
+/// A pixel source for the strip encoder, read eight pixels of one row at a time.
+///
+/// Every `FnMut(x, y) -> (R, G, B)` is one, reading pixel by pixel. A source that can read a
+/// whole run at once implements [`PixelRows::row8`] directly, and saves a call, an address
+/// computation and a bounds check per pixel.
+pub(crate) trait PixelRows {
+    /// The `[R, G, B]` channels of the eight pixels `(x..x + 8, y)`, at the plane's own depth.
+    fn row8(&mut self, x: usize, y: usize, rgb: &mut [[i32; DIM]; 3]);
+}
+impl<F: FnMut(usize, usize) -> (u16, u16, u16)> PixelRows for F {
+    #[inline(always)]
+    fn row8(&mut self, x: usize, y: usize, rgb: &mut [[i32; DIM]; 3]) {
+        for c in 0..DIM {
+            let (r, g, b) = self(x + c, y);
+            (rgb[0][c], rgb[1][c], rgb[2][c]) = (r.into(), g.into(), b.into());
+        }
+    }
+}
+/// Gather and quantize one 64x16 strip's 16 colour blocks from a pixel source, handing each to
+/// `each` in raster order (0..8 top 8-px half, 8..16 bottom), matching [`colour_strip`].
+/// `px` reads the 8-bit `(R, G, B)` at absolute frame coordinates; `(ox, oy)` is the strip's
 /// top-left pixel. Each block's three planes are built in the codec's x64 fixed point via
-/// [`colour`] (per-pixel `(Y, Cb, Cr)`, stored `(Cr, Cb, Y)` for [`colour_block`]). Blocks are
-/// raster order within the strip (0..8 top 8-px half, 8..16 bottom), matching [`colour_strip`].
+/// [`colour`] (per-pixel `(Y, Cb, Cr)`, stored `(Cr, Cb, Y)` for [`colour_block`]).
+///
+/// One block and one set of planes are live at a time and reused, so nothing is allocated,
+/// zeroed or copied per block.
+#[inline(always)]
+fn for_each_strip_block(
+    geometry: Geometry,
+    ox: usize,
+    oy: usize,
+    px: &mut impl PixelRows,
+    mut each: impl FnMut(&ColourBlock) -> Result,
+) -> Result {
+    let mut block = ColourBlock::zeroed();
+    // Every element is overwritten for each block before it is read.
+    let (mut cr, mut cb, mut y) = ([0i32; PIXELS], [0i32; PIXELS], [0i32; PIXELS]);
+    let across_shift = geometry.strip_w_shift() - DIM_SHIFT;
+    for k in 0..STRIP_BLOCKS {
+        let (bx, by) = (k & ((1usize << across_shift) - 1), k >> across_shift);
+        for row in 0..DIM {
+            let mut rgb = [[0i32; DIM]; 3];
+            px.row8(ox + bx * DIM, oy + by * DIM + row, &mut rgb);
+            let at = row * DIM;
+            for c in 0..DIM {
+                let (yv, cbv, crv) = colour(rgb[0][c], rgb[1][c], rgb[2][c]);
+                (cr[at + c], cb[at + c], y[at + c]) = (crv, cbv, yv);
+            }
+        }
+        colour_block_into(&cr, &cb, &y, &mut block);
+        each(&block)?;
+    }
+    Ok(())
+}
+/// Gather one 64x16 strip's 16 colour blocks from a pixel source; see
+/// [`for_each_strip_block`].
 ///
 /// `#[inline(never)]`: see `haar2d`'s doc comment -- part of the kernel-stack-overflow fix.
-/// The block array is heap allocated because it is about 6.5 KiB and nested copies can exhaust
+/// The block array is heap allocated because it is about 12 KiB and nested copies can exhaust
 /// the kernel stack.
 #[inline(never)]
 pub(crate) fn colour_strip_blocks(
     geometry: Geometry,
     ox: usize,
     oy: usize,
-    px: &mut impl FnMut(usize, usize) -> (u16, u16, u16),
+    px: &mut impl PixelRows,
 ) -> Result<KVec<ColourBlock>> {
     let mut blocks = KVec::with_capacity(STRIP_BLOCKS, GFP_KERNEL)?;
-    for k in 0..STRIP_BLOCKS {
-        let across_shift = geometry.strip_w_shift() - DIM_SHIFT;
-        let (bx, by) = (k & ((1usize << across_shift) - 1), k >> across_shift);
-        // One `px` call per pixel, in the same row-major order as before -- it is the
-        // expensive accessor, so the converted values are gathered once and then split into
-        // the three planes. `from_fn` avoids the zeroing that filling `[0i32; PIXELS]`
-        // afterwards would leave behind.
-        // Left as a zero-initialised fill on purpose. Gathering into an interleaved
-        // array and splitting it (as `colour_block`/`transform` now do) removes the `memset`
-        // but costs ~736 bytes of stack here, and this path already runs ~8 KB deep inside a
-        // 16 KB kernel stack -- the same budget the `#[inline(never)]` markers protect.
-        let (mut cr, mut cb, mut y) = ([0i32; PIXELS], [0i32; PIXELS], [0i32; PIXELS]);
-        // Monotonic indexing lets LLVM prove that every element is initialized before use.
-        let mut i = 0usize;
-        for r in 0..DIM {
-            for c in 0..DIM {
-                let (rr, gg, bb) = px(ox + bx * DIM + c, oy + by * DIM + r);
-                let (yv, cbv, crv) = colour(rr as i32, gg as i32, bb as i32);
-                (cr[i], cb[i], y[i]) = (crv, cbv, yv);
-                i += 1;
-            }
-        }
-        blocks.push(colour_block(&cr, &cb, &y), GFP_KERNEL)?;
-    }
+    for_each_strip_block(geometry, ox, oy, px, |b| {
+        blocks.push(b.clone(), GFP_KERNEL)?;
+        Ok(())
+    })?;
     Ok(blocks)
 }
 /// Encode ONE 64x16 strip whose top-left output pixel is `(sx, sy)`.
@@ -405,14 +556,19 @@ pub(crate) fn colour_strip_blocks(
 /// parallel encode is possible at all: a strip reads only its own 64x16 region through `px`
 /// and produces its own independent byte vector, sharing no state with any other strip. The
 /// scanout encoder in `drm_sink.rs` fans batches of these across CPUs; see `EncodeChunk`.
+///
+/// Equivalent to [`colour_strip_blocks`] then [`colour_strip`], but codes each block as it is
+/// quantized instead of collecting all sixteen first.
+#[inline(never)]
 pub(crate) fn colour_strip_at(
     geometry: Geometry,
     sx: usize,
     sy: usize,
-    px: &mut impl FnMut(usize, usize) -> (u16, u16, u16),
+    px: &mut impl PixelRows,
 ) -> Result<KVec<u8>> {
-    let blocks = colour_strip_blocks(geometry, sx, sy, px)?;
-    colour_strip(geometry, &blocks, sx as u16, sy as u16)
+    let mut coder = StripCoder::new(geometry)?;
+    for_each_strip_block(geometry, sx, sy, px, |b| coder.push(b))?;
+    coder.finish(sx as u16, sy as u16)
 }
 /// A strip's `y` (the EP08 record bands group strips by row). Reads the `y` field the strip
 /// builders write at byte offset 4 ([`colour_strip`] / [`solid_strip`]).

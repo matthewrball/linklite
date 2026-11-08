@@ -10,6 +10,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 use vino_chimera::kvino::DockProfile;
 use vino_chimera::session::{ControlSession, PresentTiming};
+use vino_chimera::pool::STREAMING_THREADS;
+use vino_chimera::scanout::StripHasher;
 use vino_chimera::MAX_CONNECTORS;
 
 const HEARTBEAT_PERIOD: Duration = Duration::from_secs(3);
@@ -291,8 +293,6 @@ pub struct Shared {
     /// Signalled whenever a mailbox or the cursor changes, or stop is requested.
     signal: Mutex<u64>,
     wake: Condvar,
-    /// Processor availability is expensive to query and stable over a capture session.
-    workers: usize,
     perf: Perf,
 }
 
@@ -305,7 +305,6 @@ impl Shared {
             cursor_gamma: core::array::from_fn(|_| Mutex::new((0, None))),
             signal: Mutex::new(0),
             wake: Condvar::new(),
-            workers: std::thread::available_parallelism().map_or(1, |n| n.get()),
             perf: Perf::default(),
         })
     }
@@ -412,7 +411,8 @@ impl Shared {
         }
         let candidates = &mailbox.candidates;
 
-        // Each strip row owns a disjoint band of the surface, so bands convert in parallel.
+        // Each strip row owns a disjoint band of the surface, so bands convert in parallel on the
+        // shared worker pool.
         let band_bytes = a.padded_width * 3 * a.strip_h;
         let mut bands: Vec<(usize, &mut [u8], &mut [u64], &mut [bool], usize)> = mailbox
             .surface
@@ -440,11 +440,7 @@ impl Shared {
                 for dy in 0..rows {
                     let source = &bgra[(y0 + dy) * stride + x0 * 4..(y0 + dy) * stride + (x0 + cols) * 4];
                     let target = &mut band[dy * a.padded_width * 3 + x0 * 3..][..cols * 3];
-                    for (rgb, px) in target.chunks_exact_mut(3).zip(source.chunks_exact(4)) {
-                        rgb[0] = px[2];
-                        rgb[1] = px[1];
-                        rgb[2] = px[0];
-                    }
+                    bgra_to_rgb(target, source);
                 }
                 if !changed[tx] {
                     changed[tx] = true;
@@ -452,21 +448,9 @@ impl Shared {
                 }
             }
         };
-        let workers = self.workers;
-        if workers < 2 || bands.len() < 4 {
-            bands.iter_mut().for_each(work);
-        } else {
-            let per = bands.len().div_ceil(workers);
-            let work = &work;
-            let (first, rest) = bands.split_at_mut(per);
-            std::thread::scope(|scope| {
-                for group in rest.chunks_mut(per) {
-                    scope.spawn(move || group.iter_mut().for_each(work));
-                }
-                // The submitting thread owns a band too, rather than waiting for an extra worker.
-                first.iter_mut().for_each(work);
-            });
-        }
+        // A few bands (a cursor blink, a typed character) are cheaper than waking a worker.
+        let threads = if bands.len() < 4 { 1 } else { STREAMING_THREADS };
+        vino_chimera::pool::for_each_mut(&mut bands, threads, |_, band| work(band));
         let newly: usize = bands.iter().map(|band| band.4).sum();
         drop(bands);
         mailbox.changed_count += newly;
@@ -658,10 +642,13 @@ fn gamma_premultiplied_bgra(bgra: &[u8], lut: &[[u8; 256]; 3]) -> Vec<u8> {
 }
 
 /// Copy packed RGB888 `src` into `dst` through a per-channel gamma table. Large copies (a whole
-/// 4K surface is about 25 MB: 4.8 ms on one core, 1.4 ms split across cores, benchmarked) are
-/// split across cores, since this runs on the engine thread while it holds the head's mailbox lock.
+/// 4K surface is about 25 MB: 4.8 ms on one core, 1.4 ms split across 8, benchmarked) are split
+/// across the shared worker pool, since this runs on the engine thread while it holds the head's
+/// mailbox lock.
 fn apply_gamma(dst: &mut [u8], src: &[u8], lut: &[[u8; 256]; 3]) {
     const PARALLEL_BYTES: usize = 1 << 20;
+    // Whole pixels per chunk, so no pixel straddles two calls.
+    const CHUNK_BYTES: usize = 3 << 16;
     let serial = |dst: &mut [u8], src: &[u8]| {
         for (d, s) in dst.chunks_exact_mut(3).zip(src.chunks_exact(3)) {
             d[0] = lut[0][usize::from(s[0])];
@@ -669,38 +656,58 @@ fn apply_gamma(dst: &mut [u8], src: &[u8], lut: &[[u8; 256]; 3]) {
             d[2] = lut[2][usize::from(s[2])];
         }
     };
-    static WORKERS: std::sync::LazyLock<usize> =
-        std::sync::LazyLock::new(|| std::thread::available_parallelism().map_or(1, |n| n.get()).min(8));
-    let workers = *WORKERS;
-    if dst.len() < PARALLEL_BYTES || workers < 2 {
+    if dst.len() < PARALLEL_BYTES {
         serial(dst, src);
         return;
     }
-    // Whole pixels per chunk, so no pixel straddles two workers.
-    let chunk = dst.len().div_ceil(workers).div_ceil(3) * 3;
-    std::thread::scope(|scope| {
-        for (d, s) in dst.chunks_mut(chunk).zip(src.chunks(chunk)) {
-            scope.spawn(move || serial(d, s));
+    let mut chunks: Vec<(&mut [u8], &[u8])> = dst.chunks_mut(CHUNK_BYTES).zip(src.chunks(CHUNK_BYTES)).collect();
+    vino_chimera::pool::for_each_mut(&mut chunks, STREAMING_THREADS, |_, (d, s)| serial(d, s));
+}
+
+/// Convert BGRA pixels to packed RGB888, `min(rgb.len() / 3, bgra.len() / 4)` of them.
+fn bgra_to_rgb(rgb: &mut [u8], bgra: &[u8]) {
+    #[cfg(target_arch = "aarch64")]
+    let done = bgra_to_rgb_neon(rgb, bgra);
+    #[cfg(not(target_arch = "aarch64"))]
+    let done = 0;
+    bgra_to_rgb_scalar(&mut rgb[done * 3..], &bgra[done * 4..]);
+}
+
+fn bgra_to_rgb_scalar(rgb: &mut [u8], bgra: &[u8]) {
+    for (rgb, px) in rgb.chunks_exact_mut(3).zip(bgra.chunks_exact(4)) {
+        rgb[0] = px[2];
+        rgb[1] = px[1];
+        rgb[2] = px[0];
+    }
+}
+
+/// [`bgra_to_rgb_scalar`] 16 pixels at a time: `vld4q_u8` splits the channels into registers,
+/// `vst3q_u8` interleaves them back without alpha. Returns how many pixels it converted (a
+/// multiple of 16); the caller converts the rest.
+#[cfg(target_arch = "aarch64")]
+fn bgra_to_rgb_neon(rgb: &mut [u8], bgra: &[u8]) -> usize {
+    use core::arch::aarch64::{uint8x16x3_t, vld4q_u8, vst3q_u8};
+    let mut done = 0;
+    for (rgb, px) in rgb.chunks_exact_mut(48).zip(bgra.chunks_exact(64)) {
+        // SAFETY: NEON is part of the aarch64 baseline, and the chunks are exactly the 64 bytes
+        // read and 48 bytes written.
+        unsafe {
+            let bgra = vld4q_u8(px.as_ptr());
+            vst3q_u8(rgb.as_mut_ptr(), uint8x16x3_t(bgra.2, bgra.1, bgra.0));
         }
-    });
+        done += 16;
+    }
+    done
 }
 
 /// Hash of one strip's BGRA pixels (`cols` x `rows` at `x0, y0`). Change detection only: two
 /// different strips agreeing is vanishingly unlikely, and the same pixels always agree.
 fn bgra_strip_hash(bgra: &[u8], stride: usize, x0: usize, y0: usize, cols: usize, rows: usize) -> u64 {
-    const PRIME: u64 = 0x9e37_79b1_85eb_ca87;
-    let mut h = PRIME;
+    let mut h = StripHasher::new(StripHasher::PRIME);
     for y in y0..y0 + rows {
-        let line = &bgra[y * stride + x0 * 4..y * stride + (x0 + cols) * 4];
-        let mut words = line.chunks_exact(8);
-        for word in &mut words {
-            h = (h ^ u64::from_le_bytes(word.try_into().unwrap_or([0; 8]))).wrapping_mul(PRIME).rotate_left(31);
-        }
-        for &byte in words.remainder() {
-            h = (h ^ u64::from(byte)).wrapping_mul(PRIME);
-        }
+        h.line(&bgra[y * stride + x0 * 4..y * stride + (x0 + cols) * 4]);
     }
-    h | 1 // never 0, which marks a strip whose pixels are not yet known
+    h.finish() | 1 // never 0, which marks a strip whose pixels are not yet known
 }
 
 fn padded(profile: DockProfile, width: usize, height: usize) -> (usize, usize) {
@@ -1439,8 +1446,7 @@ mod tests {
 
     #[test]
     fn parallel_bands_preserve_pixels_padding_and_damage_boundaries() {
-        let mut shared = Shared::new();
-        Arc::get_mut(&mut shared).unwrap().workers = 4;
+        let shared = Shared::new();
         shared.open(0, Accepting { strip_w: 2, strip_h: 2, ..accepting(7, 9, 8, 10) });
         let mut bgra: Vec<u8> = (0..frame_len(32, 7, 9).unwrap()).map(|i| i as u8).collect();
         let mut shadow = Vec::new();
@@ -1468,6 +1474,23 @@ mod tests {
         assert_eq!(shadow, expected);
         shared.submit_frame(0, &bgra, 32, 7, 9, []);
         assert_eq!(shared.take_frame(0, &mut shadow), None);
+    }
+
+    #[test]
+    fn bgra_to_rgb_matches_scalar_on_odd_sizes_and_offsets() {
+        let bgra: Vec<u8> = (0..4 * 100 + 7).map(|i| (i * 37 + 11) as u8).collect();
+        for offset in [0, 1, 3, 4, 5] {
+            for pixels in [0, 1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 99] {
+                let src = &bgra[offset..offset + pixels * 4];
+                let (mut fast, mut slow) = (vec![0xaa; pixels * 3 + 2], vec![0xaa; pixels * 3 + 2]);
+                bgra_to_rgb(&mut fast[..pixels * 3], src);
+                bgra_to_rgb_scalar(&mut slow[..pixels * 3], src);
+                // The bytes past the last pixel stay untouched.
+                assert_eq!(fast, slow, "offset {offset} pixels {pixels}");
+                #[cfg(target_arch = "aarch64")]
+                assert_eq!(bgra_to_rgb_neon(&mut fast[1..pixels * 3 + 1], src), pixels / 16 * 16);
+            }
+        }
     }
 
     #[test]
@@ -1512,4 +1535,3 @@ mod tests {
         assert_eq!(budget.tokens, VIDEO_BURST_BYTES);
     }
 }
-
