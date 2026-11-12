@@ -3,11 +3,13 @@
 import CDLLite
 import CoreGraphics
 import Foundation
+import LinkLiteCore
+import LinkLiteRotation
 import os
 
 private let log = Logger(subsystem: "com.ball.linklite", category: "display")
 
-/// A macOS display backed by the private CGVirtualDisplay API, shaped like one dock monitor.
+/// A macOS display backed by the private CGVirtualDisplay API, shaped like one dock monitor, turned to `orientation`.
 /// The display exists while this object is alive.
 @MainActor
 final class VirtualDisplay {
@@ -18,23 +20,42 @@ final class VirtualDisplay {
     /// Fallback physical size (27" 16:9) when the monitor's EDID reports none.
     static let fallbackSizeMillimeters = CGSize(width: 597, height: 336)
 
-    let displayID: CGDirectDisplayID
+    /// Read from any isolation: a display's ID never changes, and the capture's start reads it off the main actor.
+    nonisolated let displayID: CGDirectDisplayID
+    /// The vendor, product and serial macOS knows this display by. Usually the monitor's own;
+    /// see `DisplayIdentityAllocator` for when it differs.
+    let identity: DisplayIdentity
+    /// The display exists while this object does. The identity lease is attached to `display` itself
+    /// (see `DisplayLease`), so the identity is free only once that display has been deallocated,
+    /// whatever order this object's properties are released in.
     private let display: CGVirtualDisplay
 
-    /// Creates the display. `onTerminated` runs on the main queue if the window server removes it.
-    init(monitor: MonitorInfo, onTerminated: @escaping @MainActor () -> Void) throws {
-        let modes = Self.modeSizes(nativeWidth: monitor.width, nativeHeight: monitor.height)
+    /// Creates the display with the claimed identity, shaped for `orientation`: a portrait head gets a portrait
+    /// display (its modes and millimetres with width and height exchanged). `onTerminated` runs on the main queue if
+    /// the window server removes it.
+    init(monitor: HeadMonitor, orientation: DisplayOrientation = .standard, claim: IdentityClaim,
+         onTerminated: @escaping @MainActor () -> Void) throws {
+        let identity = claim.identity
+        let geometry = RotationGeometry(physical: PixelSize(width: Int(monitor.width), height: Int(monitor.height)),
+                                        orientation: orientation)
+        let modes = geometry.logicalModes(
+            Self.modeSizes(nativeWidth: monitor.width, nativeHeight: monitor.height).map {
+                PixelSize(width: Int($0.width), height: Int($0.height))
+            }
+        ).map { (width: UInt32($0.width), height: UInt32($0.height)) }
         let descriptor = CGVirtualDisplayDescriptor()
         descriptor.queue = DispatchQueue.main
         descriptor.name = monitor.name
-        descriptor.maxPixelsWide = modes.map(\.width).max() ?? monitor.width
-        descriptor.maxPixelsHigh = modes.map(\.height).max() ?? monitor.height
-        descriptor.sizeInMillimeters = monitor.widthMillimeters > 0 && monitor.heightMillimeters > 0
-            ? CGSize(width: Double(monitor.widthMillimeters), height: Double(monitor.heightMillimeters))
-            : Self.fallbackSizeMillimeters
-        descriptor.vendorID = UInt32(monitor.vendorID)
-        descriptor.productID = UInt32(monitor.productCode)
-        descriptor.serialNum = monitor.serial
+        descriptor.maxPixelsWide = modes.map(\.width).max() ?? UInt32(geometry.logical.width)
+        descriptor.maxPixelsHigh = modes.map(\.height).max() ?? UInt32(geometry.logical.height)
+        let millimeters = monitor.widthMillimeters > 0 && monitor.heightMillimeters > 0
+            ? geometry.logicalMillimeters(width: Double(monitor.widthMillimeters), height: Double(monitor.heightMillimeters))
+            : geometry.logicalMillimeters(width: Double(Self.fallbackSizeMillimeters.width),
+                                          height: Double(Self.fallbackSizeMillimeters.height))
+        descriptor.sizeInMillimeters = CGSize(width: millimeters.width, height: millimeters.height)
+        descriptor.vendorID = UInt32(identity.vendorID)
+        descriptor.productID = UInt32(identity.productCode)
+        descriptor.serialNum = identity.serial
         // sRGB primaries: macOS renders sRGB, capture asks for sRGB, and the dock forwards the
         // pixels untouched, so no gamut conversion happens anywhere in the chain.
         descriptor.redPrimary = CGPoint(x: 0.64, y: 0.33)
@@ -48,6 +69,9 @@ final class VirtualDisplay {
         guard let display = CGVirtualDisplay(descriptor: descriptor) else {
             throw CreationError(description: "CGVirtualDisplay refused \(monitor.name)")
         }
+        // Attached before anything else can fail: if setup throws below, `display` is released on
+        // the way out, and the identity is released with it, never before.
+        DisplayLease.attach(claim.lease, to: display)
 
         let settings = CGVirtualDisplaySettings()
         settings.hiDPI = 1
@@ -60,8 +84,9 @@ final class VirtualDisplay {
         }
 
         self.display = display
+        self.identity = identity
         displayID = display.displayID
-        log.info("Created virtual display \(self.displayID) for \(monitor.name, privacy: .public)")
+        log.info("Created virtual display \(self.displayID) for \(monitor.name, privacy: .public) \(orientation.rawValue)°")
     }
 
     /// Sizes handed to CGVirtualDisplay. With hiDPI on, macOS can list each one as a 1x mode and

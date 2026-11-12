@@ -4,6 +4,18 @@ All notable changes to LinkLite are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Added (beta, not run on a dock)
+
+- Monitor rotation: turn each dock monitor to 0°, 90°, 180° or 270° from its card in the menu-bar panel. Rotation is tested in software only. Rotated monitors send every frame whole, and no frame rate is promised for them. Windows may move when a monitor switches between landscape and portrait. See `docs/DISPLAY_ROTATION.md`.
+
+### Fixed
+
+- Beta fix for monitors whose EDIDs differ but report the same manufacturer, product and numeric serial number (some models ship a placeholder serial such as 0x01010101). LinkLite assigns distinct virtual identities and retains per-socket assignments across reconnects. This is software-tested but has not yet been verified with a dock. Identical monitors cannot be distinguished when moved between sockets, so settings may follow the socket rather than the physical panel.
+- Monitors whose EDIDs are byte-for-byte identical are still not supported. The engine refuses the second socket before it is attached, because the dock's shared EDID handler can answer for the other socket's monitor, and that guard is unchanged.
+- LinkLite holds its old virtual-display object until its capture stop is confirmed and serializes replacement captures on the same socket. macOS window-server teardown timing and real dock behavior remain unverified.
+- A monitor waiting for macOS to release its identity now shows as "Waiting" in the panel, and that state is refreshed when the wait changes, including on retries.
+- Screen Recording access that is regranted while a capture's old denial is still in flight no longer leaves the monitors blocked. Each check on activation or panel open now counts a confirmed grant, so the older denial is recognised as stale.
+
 ## [0.3.15] - 2026-11-08
 
 ### Changed

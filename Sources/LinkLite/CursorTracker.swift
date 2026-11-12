@@ -2,6 +2,7 @@
 
 import AppKit
 import CoreGraphics
+import LinkLiteRotation
 
 /// Feeds the dock's hardware cursor: where the pointer is, and what it looks like.
 ///
@@ -41,8 +42,8 @@ final class CursorTracker {
     private var pollInterval: TimeInterval = 0
     private var lastLocation = CGPoint(x: CGFloat.nan, y: CGFloat.nan)
     private var lastMovement: CFTimeInterval = 0
-    /// The position the dock already holds; repeated polls send nothing.
-    private var lastSent: (head: Int32, x: Int32, y: Int32)?
+    /// Routes the pointer to a dock head (or none) and sends only what changed; see DockCursorRouter.
+    private var router = DockCursorRouter()
     /// While the displays sleep nothing can be seen, so polling pauses until they wake.
     private var screensAsleep = false
     private var screenObservers: [NSObjectProtocol] = []
@@ -69,7 +70,7 @@ final class CursorTracker {
         } else if !targets.isEmpty {
             schedulePoll(Self.idleInterval)
             lastShapeCheck = .distantPast
-            lastSent = nil
+            router.reporter.forget()
             update()
         }
     }
@@ -77,12 +78,14 @@ final class CursorTracker {
     func setTargets(_ targets: [Target]) {
         self.targets = targets
         if targets.isEmpty {
+            // Hide the dock's cursor before tracking stops: once it stops, nothing moves the dock's cursor off
+            // the last position, which would stay on a rotated head that has no dock cursor of its own.
+            router.setTargets([], pointerX: 0, pointerY: 0, send: sendToDock)
             stop()
-        } else if monitors.isEmpty {
-            start()
+            return
         }
+        if monitors.isEmpty { start() }
         lastShapeCheck = .distantPast
-        lastSent = nil
         update()
     }
 
@@ -145,24 +148,26 @@ final class CursorTracker {
     private func update(at location: CGPoint) {
         lastLocation = location
         guard !targets.isEmpty else { return }
-        guard let (target, bounds) = targets.lazy
-            .map({ ($0, CGDisplayBounds($0.displayID)) })
-            .first(where: { $0.1.contains(location) })
-        else {
-            send(head: -1, x: 0, y: 0)
-            return
-        }
-        let scale = CGFloat(target.width) / bounds.width
-        updateShape(scale: scale)
-        let x = Int32(((location.x - bounds.minX) * scale).rounded(.down))
-        let y = Int32(((location.y - bounds.minY) * scale).rounded(.down))
-        send(head: Int32(target.head), x: x, y: y)
+        let hit = router.setTargets(dockTargets(), pointerX: Double(location.x), pointerY: Double(location.y),
+                                    send: sendToDock)
+        if let hit { updateShape(scale: CGFloat(hit.scale)) }
     }
 
-    private func send(head: Int32, x: Int32, y: Int32) {
-        if let lastSent, lastSent == (head, x, y) { return }
-        lastSent = (head, x, y)
-        engine.moveCursor(head: head, x: x, y: y)
+    /// The current bounds of each dock head that draws the pointer. Bounds are read at each update, because
+    /// displays move when the arrangement changes. A display with no size is left out.
+    private func dockTargets() -> [DockCursorTarget] {
+        targets.compactMap { target in
+            let bounds = CGDisplayBounds(target.displayID)
+            guard bounds.width > 0, bounds.height > 0 else { return nil }
+            return DockCursorTarget(head: Int32(target.head), originX: Double(bounds.minX), originY: Double(bounds.minY),
+                                    widthPoints: Double(bounds.width), heightPoints: Double(bounds.height),
+                                    modeWidth: Double(target.width))
+        }
+    }
+
+    /// Delivers a report to the engine. False if the engine is not running, so the router sends it again later.
+    private func sendToDock(_ report: DockCursorReport) -> Bool {
+        engine.moveCursor(head: report.head, x: report.x, y: report.y)
     }
 
     /// Re-renders the system cursor at the dock's pixel scale when it may have changed shape,

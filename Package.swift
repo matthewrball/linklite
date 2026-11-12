@@ -21,9 +21,20 @@ let package = Package(
     ],
     targets: [
         .target(name: "DLProbeCore"),
+        .target(name: "LinkLiteCore"),
         .executableTarget(
             name: "dlprobe",
             dependencies: ["DLProbeCore"]
+        ),
+        // Pure rules and the head controller (no AppKit, CoreGraphics or USB) so they can be tested without a dock.
+        // The head runtime drives each head's captures through LinkLiteCore's StreamLifecycle.
+        .target(
+            name: "LinkLiteRotation",
+            dependencies: ["LinkLiteCore"]
+        ),
+        .testTarget(
+            name: "LinkLiteRotationTests",
+            dependencies: ["LinkLiteRotation", "LinkLiteCore"]
         ),
         .target(
             name: "CDLLite",
@@ -40,6 +51,8 @@ let package = Package(
             name: "LinkLite",
             dependencies: [
                 "CDLLite",
+                "LinkLiteCore",
+                "LinkLiteRotation",
                 .product(name: "Sparkle", package: "Sparkle")
             ],
             linkerSettings: [
@@ -53,6 +66,10 @@ let package = Package(
         .testTarget(
             name: "DLProbeCoreTests",
             dependencies: ["DLProbeCore"]
+        ),
+        .testTarget(
+            name: "LinkLiteCoreTests",
+            dependencies: ["LinkLiteCore"]
         )
     ]
 )
