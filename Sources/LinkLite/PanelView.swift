@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import AppKit
+import LinkLiteRotation
 import SwiftUI
 
 /// What the menu-bar panel shows. AppDelegate refreshes it from DisplayHost, SMAppService and
@@ -16,10 +17,22 @@ final class PanelModel: ObservableObject {
         let name: String
         let detail: String
         let problem: String?
+        /// The head has no display yet because macOS has not released the monitor's identity.
+        var waiting = false
+        /// A stream has started. Without one and without a problem the head is starting or retrying, and is not
+        /// shown as live.
+        var capturing = false
+        var orientation: DisplayOrientation = .standard
+        /// Whether the rotation follows this monitor or is kept per port (see OrientationPreferences).
+        var rotationScope: MonitorKey.RotationScope = .followsMonitor
+        /// A usable frame has arrived for the current capture. "Live" is shown only then.
+        var isLive = false
     }
 
     @Published var status: Status = .starting
     @Published var message = ""
+    /// Shown in place of the subtitle while a capture's stop is unconfirmed. Nil when none is.
+    @Published var stopProblem: String?
     @Published var monitors: [Monitor] = []
     @Published var openAtLogin = false
     @Published var loginNeedsApproval = false
@@ -29,6 +42,8 @@ final class PanelModel: ObservableObject {
     @Published var isSettingsExpanded = false
 
     var toggleOpenAtLogin: () -> Void = {}
+    /// Head number and the rotation chosen for it.
+    var setOrientation: (UInt8, DisplayOrientation) -> Void = { _, _ in }
     var toggleAutomaticUpdates: () -> Void = {}
     var checkForUpdates: () -> Void = {}
     var openScreenRecordingSettings: () -> Void = {}
@@ -62,7 +77,10 @@ struct PanelView: View {
             StatusCard(model: model)
             if !model.monitors.isEmpty {
                 VStack(spacing: 6) {
-                    ForEach(model.monitors) { MonitorCard(monitor: $0).transition(DisclosureMotion.reveal) }
+                    ForEach(model.monitors) { monitor in
+                        MonitorCard(monitor: monitor) { model.setOrientation(monitor.id, $0) }
+                            .transition(DisclosureMotion.reveal)
+                    }
                 }
                 .transition(DisclosureMotion.reveal)
             }
@@ -237,6 +255,9 @@ private struct StatusCard: View {
 
     /// Only when there is something to say beyond the title.
     private var subtitle: String? {
+        if let stopProblem = model.stopProblem {
+            return stopProblem
+        }
         switch model.status {
         case .connected:
             let count = model.monitors.count
@@ -299,8 +320,43 @@ private struct StatusOrb: View {
 
 private struct MonitorCard: View {
     let monitor: PanelModel.Monitor
+    let setOrientation: (DisplayOrientation) -> Void
+
+    /// A problem is shown first. A waiting head says so, and a head with no stream running says it is starting, so
+    /// nothing is shown as live without a stream.
+    private var line: String {
+        if let problem = monitor.problem { return problem }
+        if monitor.waiting { return "Waiting for macOS to release this monitor's display" }
+        return monitor.capturing ? monitor.detail : "Starting capture…"
+    }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            card
+            if monitor.orientation.swapsAxes {
+                note("Portrait rebuilds this monitor's display, so macOS may move its windows.")
+            }
+            switch monitor.rotationScope {
+            case .followsMonitor:
+                EmptyView()
+            case .perPortIdentical:
+                note("Identical monitors keep their rotations per port. If two identical monitors swap ports, their rotations swap too.")
+            case .perPortWithoutSerial:
+                note("This monitor reports no serial number, so its rotation is kept per port. Moving it to another port changes its rotation.")
+            }
+        }
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10.5))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 10)
+            .accessibilityLabel(text)
+    }
+
+    private var card: some View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -316,13 +372,24 @@ private struct MonitorCard: View {
                 Text(monitor.name)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
-                Text(monitor.problem ?? monitor.detail)
+                Text(line)
                     .font(.system(size: 11.5).monospacedDigit())
                     .foregroundStyle(monitor.problem == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
-            if monitor.problem == nil {
+            RotationMenu(monitorName: monitor.name, orientation: monitor.orientation, choose: setOrientation)
+            if monitor.waiting {
+                Text("Waiting")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.secondary.opacity(0.14), in: Capsule())
+            } else if monitor.problem != nil {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            } else if monitor.isLive {
                 Text("Live")
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(mint)
@@ -330,12 +397,61 @@ private struct MonitorCard: View {
                     .padding(.vertical, 3)
                     .background(mint.opacity(0.14), in: Capsule())
             } else {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                // Shown until the first usable frame. Nothing is claimed as live before the picture is flowing.
+                Text("Starting")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.secondary.opacity(0.14), in: Capsule())
             }
         }
         .padding(10)
         .card()
+    }
+}
+
+/// Chooses a monitor's rotation (beta). The check mark marks the current choice.
+private struct RotationMenu: View {
+    let monitorName: String
+    let orientation: DisplayOrientation
+    let choose: (DisplayOrientation) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(DisplayOrientation.allCases, id: \.self) { option in
+                Button {
+                    choose(option)
+                } label: {
+                    if option == orientation {
+                        Label(option.title, systemImage: "checkmark")
+                    } else {
+                        Text(option.title)
+                    }
+                }
+            }
+        } label: {
+            Label("\(orientation.rawValue)°", systemImage: "rotate.right")
+                .font(.system(size: 11.5).monospacedDigit())
+        }
+        .menuStyle(.button)
+        .controlSize(.small)
+        .fixedSize()
+        .help("Rotation (beta) for \(monitorName)")
+        .accessibilityLabel("Rotation (beta) for \(monitorName)")
+        .accessibilityValue(orientation.title)
+    }
+}
+
+extension DisplayOrientation {
+    /// What the rotation menu offers. The angle names the monitor's clockwise turn, not the picture's.
+    var title: String {
+        switch self {
+        case .standard: "Standard (0°)"
+        case .turnedClockwise: "Turned clockwise (90°)"
+        case .upsideDown: "Upside down (180°)"
+        case .turnedCounterclockwise: "Turned counterclockwise (270°)"
+        }
     }
 }
 

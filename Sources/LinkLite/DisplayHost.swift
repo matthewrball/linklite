@@ -4,65 +4,146 @@ import AppKit
 import CDLLite
 import CoreGraphics
 import Foundation
+import LinkLiteCore
+import LinkLiteRotation
 import os
 import ScreenCaptureKit
 
 private let log = Logger(subsystem: "com.ball.linklite", category: "host")
 private let perfLog = Logger(subsystem: "com.ball.linklite", category: "perf")
 
-/// Ties the engine to macOS: one virtual display plus one capture stream per attached dock head.
+extension HeadMonitor {
+    init(_ info: MonitorInfo) {
+        self.init(head: info.head, vendorID: info.vendorID, productCode: info.productCode, serial: info.serial,
+                  width: info.width, height: info.height, refreshHz: info.refreshHz,
+                  widthMillimeters: info.widthMillimeters, heightMillimeters: info.heightMillimeters,
+                  name: info.name, hardwareCursor: info.hardwareCursor)
+    }
+}
+
+/// Ties the engine to macOS. The rules live in HeadController (LinkLiteRotation). HeadRuntime performs its commands
+/// with the real engine, virtual display, ScreenCaptureKit and user defaults, through one StreamLifecycle per head.
+/// This class supplies the platform operations and the identity claims, and feeds results back as events.
 @MainActor
 final class DisplayHost {
-    struct Head {
-        var monitor: MonitorInfo
-        var display: VirtualDisplay?
-        var capture: DisplayCapture?
-        /// Identifies the current capture attempt so stale async results are discarded.
-        var captureToken = UUID()
-        var startTask: Task<Void, Never>?
-        var problem: String?
-        var rebuiltAfterTermination = false
-        /// A scheduled restart after the stream stopped or failed to start, and how many in a row.
-        var retryTask: Task<Void, Never>?
-        var retryAttempt = 0
-        /// The gamma table last sent to the engine (R, G, B, 256 bytes each); nil sends again.
-        var sentGamma: [UInt8]?
-    }
-
     private(set) var engineState: DLLState?
     private(set) var engineMessage = "Starting…"
-    private(set) var heads: [UInt8: Head] = [:]
-    private(set) var screenRecordingDenied = false
-    /// Called after any change the menu shows.
+    /// Called after any change the menu shows. Never called from inside a change: see `changes`.
     var onChange: (() -> Void)?
+
+    private nonisolated static let configuredMonitorsKey = "ConfiguredMonitors"
+    private nonisolated static let identityRecordsKey = "DisplayIdentityRecords"
+    /// `defaults write com.ball.linklite PerformanceLogging -bool true` logs engine counters once a
+    /// second (category "perf"); read at start.
+    private nonisolated static let performanceLoggingKey = "PerformanceLogging"
 
     private let engine = EngineHandle()
     private lazy var cursor = CursorTracker(engine: engine)
+    /// Decides the identity each virtual display is created with, and holds each identity until its display is
+    /// deallocated. Its records persist, so each socket keeps its identity across launches.
+    private let identities: DisplayIdentityAllocator
+    private lazy var runtime: HeadRuntime<VirtualDisplay, DisplayCapture> = makeRuntime()
+    /// Screen Recording access: the launch request and the activation recheck. Its grants go to the runtime.
+    private lazy var screenRecording = ScreenRecordingAccess(
+        platform: ScreenRecordingAccess.Platform(
+            isGranted: { CGPreflightScreenCaptureAccess() },
+            requestAccess: { CGRequestScreenCaptureAccess() }
+        )
+    ) { [weak self] granted in
+        self?.runtime.send(.permissionChanged(granted: granted))
+    }
+    /// Delivers `onChange` once per run of changes, on a later main-actor turn, so a retry or a notification that
+    /// changes state cannot call back into the observer during the change.
+    private lazy var changes = CoalescedNotifier(
+        schedule: { work in Task { @MainActor in work() } },
+        deliver: { [weak self] in self?.onChange?() }
+    )
     private var displayReconfigured: NSObjectProtocol?
-    private static let configuredMonitorsKey = "ConfiguredMonitors"
-    /// `defaults write com.ball.linklite PerformanceLogging -bool true` logs engine counters once a
-    /// second (category "perf"); read at start.
-    private static let performanceLoggingKey = "PerformanceLogging"
+    private var identityReleased: NSObjectProtocol?
     private var perfTimer: Timer?
     private var gammaTimer: Timer?
     private var perfIntervalStart = ContinuousClock.now
+    /// The cursor targets last given to CursorTracker, so screen changes can refresh them.
+    private var lastCursorTargets: [CursorTracker.Target] = []
+    /// The gamma table last sent to the engine per head (R, G, B, 256 bytes each); nil sends again.
+    private var sentGamma: [UInt8: [UInt8]] = [:]
+    /// The capture attempt the gamma table was last sent for, per head. A new stream may follow a new engine mailbox,
+    /// so the table is sent again when the attempt changes.
+    private var gammaAttempts: [UInt8: CaptureAttempt] = [:]
 
-    /// A detached head's virtual display, kept briefly for a reconnect.
-    private struct Retained {
-        var display: VirtualDisplay
-        var monitor: MonitorInfo
-        var release: Task<Void, Never>
+    init() {
+        identities = DisplayIdentityAllocator(
+            records: DisplayIdentityRecords(propertyList: UserDefaults.standard.dictionary(forKey: Self.identityRecordsKey)),
+            persist: { records in
+                UserDefaults.standard.set(records.propertyList, forKey: Self.identityRecordsKey)
+            }
+        )
     }
-    private var retained: [UInt8: Retained] = [:]
-    /// Long enough to ride out a dock reset (about 7 s measured) or a quick cable replug.
-    private static let reconnectGrace: Duration = .seconds(20)
+
+    /// What the menu shows for each attached head.
+    var heads: [UInt8: HeadStatus] {
+        Dictionary(uniqueKeysWithValues: runtime.controller.statuses.map { ($0.monitor.head, $0) })
+    }
+
+    var screenRecordingDenied: Bool { runtime.controller.permissionDenied }
+
+    /// What the panel shows while a capture's stop is not confirmed, or nil.
+    var stopProblem: String? {
+        runtime.hasUnconfirmedStops ? StreamStopNotConfirmed(reason: "").errorDescription : nil
+    }
+
+    private func makeRuntime() -> HeadRuntime<VirtualDisplay, DisplayCapture> {
+        let defaults = UserDefaults.standard
+        let engine = self.engine
+        let runtime = HeadRuntime(
+            controller: HeadController(
+                preferences: OrientationPreferences(
+                    propertyList: defaults.dictionary(forKey: OrientationPreferences.defaultsKey)),
+                configuredModes: defaults.stringArray(forKey: Self.configuredMonitorsKey) ?? []),
+            platform: HeadPlatform(
+                createDisplay: { [weak self] monitor, orientation, attached, onTerminated in
+                    guard let self else { return .failed("LinkLite is quitting") }
+                    return self.createDisplay(monitor: monitor, orientation: orientation, attached: attached,
+                                              onTerminated: onTerminated)
+                },
+                startStream: { display, monitor, orientation, gate, onUsableFrame, onStop in
+                    try await DisplayCapture.start(displayID: display.displayID, monitor: monitor,
+                                                   orientation: orientation, engine: engine, gate: gate,
+                                                   onUsableFrame: onUsableFrame, onStop: onStop)
+                },
+                stopStream: { try await $0.stop() },
+                failure: { Self.failure(for: $0) },
+                configureMode: { display, monitor, orientation in
+                    await Self.configureMode(of: display, for: monitor, orientation: orientation)
+                },
+                publishCursorTargets: { [weak self] targets in
+                    self?.publishCursorTargets(targets)
+                },
+                savePreferences: { propertyList in
+                    if propertyList.isEmpty {
+                        UserDefaults.standard.removeObject(forKey: OrientationPreferences.defaultsKey)
+                    } else {
+                        UserDefaults.standard.set(propertyList, forKey: OrientationPreferences.defaultsKey)
+                    }
+                },
+                saveConfiguredModes: { entries in
+                    UserDefaults.standard.set(entries, forKey: Self.configuredMonitorsKey)
+                }
+            )
+        )
+        runtime.driver.onChange = { [weak self] in
+            self?.pollGamma()
+            self?.changes.request()
+        }
+        runtime.onStopStateChanged = { [weak self] in
+            self?.changes.request()
+        }
+        return runtime
+    }
 
     func start() {
-        if !CGPreflightScreenCaptureAccess() {
-            screenRecordingDenied = true
-            // Shows the system prompt once and lists the app under Screen & System Audio Recording.
-            CGRequestScreenCaptureAccess()
-        }
+        // Denied until a check confirms access. The one explicit request may show the prompt once.
+        screenRecording.checkAtLaunch()
         if !engine.start(onEvent: { [weak self] event in self?.handle(event) }) {
             engineMessage = "The dock engine could not start"
             log.error("dll_engine_start returned NULL")
@@ -72,14 +153,20 @@ final class DisplayHost {
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.updateCursorTargets()
+                self?.refreshCursorTargets()
                 self?.pollGamma()
             }
+        }
+        // A display was deallocated, so an identity may be free for a head waiting on it.
+        identityReleased = NotificationCenter.default.addObserver(
+            forName: DisplayIdentityAllocator.identityReleasedNotification, object: identities, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.runtime.send(.identityMayBeFree) }
         }
         if UserDefaults.standard.bool(forKey: Self.performanceLoggingKey) {
             startPerformanceLogging()
         }
-        onChange?()
+        changes.request()
     }
 
     /// Blanks the monitors and releases the dock. Blocks until the engine thread has exited.
@@ -151,39 +238,45 @@ final class DisplayHost {
         }
     }
 
-    /// Re-checks Screen Recording access and restarts capture for heads that were waiting on it.
+    /// Re-checks Screen Recording access. A confirmed grant is reported to the runtime, which restarts capture for heads
+    /// that were waiting on it and counts the grant, even when no denial is known. Called when the app becomes active
+    /// (the user returns from System Settings) and when the panel opens. Never prompts.
     func refreshScreenRecordingAccess() {
-        guard screenRecordingDenied, CGPreflightScreenCaptureAccess() else { return }
-        screenRecordingDenied = false
-        resumeCapture()
-        onChange?()
+        screenRecording.recheck()
     }
 
     /// Restarts capture now for every head whose stream is down, e.g. after the Mac wakes or
     /// unlocks. ScreenCaptureKit stops all streams when the screen locks or the displays sleep
     /// (SCStreamError -3815); until a new stream starts, the dock keeps showing the last frame.
     func resumeCapture() {
-        guard !screenRecordingDenied else { return }
-        for (head, state) in heads where state.display != nil && state.capture == nil {
-            // A start already in flight may fail if it began while the displays slept; its retry
-            // then waits 1 s instead of the long backoff accumulated during sleep.
-            heads[head]?.retryAttempt = 0
-            guard state.startTask == nil else { continue }
-            heads[head]?.retryTask?.cancel()
-            heads[head]?.retryTask = nil
-            log.info("Resuming capture for head \(head)")
-            startCapture(head: head)
-        }
+        runtime.send(.resumeCapture)
+    }
+
+    /// The rotation of an attached head, or nil if no monitor is attached on it.
+    func orientation(forHead head: UInt8) -> DisplayOrientation? {
+        runtime.controller.status(forHead: head)?.orientation
+    }
+
+    /// Whether `head`'s rotation follows the monitor or is kept per port (identical or serial-less panels);
+    /// see OrientationPreferences. Nil if no monitor is attached on `head`.
+    func rotationScope(forHead head: UInt8) -> MonitorKey.RotationScope? {
+        runtime.controller.rotationScope(forHead: head)
+    }
+
+    /// Sets the rotation of an attached head and applies it now. The controller stores it under the identity rules
+    /// (OrientationPreferences) and decides how the display and capture follow.
+    func setOrientation(_ requested: DisplayOrientation, forHead head: UInt8) {
+        runtime.send(.setOrientation(head: head, orientation: requested))
     }
 
     private func handle(_ event: EngineEvent) {
         switch event {
-        case .attached(let monitor):
-            log.info("Head \(monitor.head) attached: \(monitor.name, privacy: .public) \(monitor.width)x\(monitor.height)@\(monitor.refreshHz)")
-            attach(monitor)
+        case .attached(let info):
+            log.info("Head \(info.head) attached: \(info.name, privacy: .public) \(info.width)x\(info.height)@\(info.refreshHz)")
+            runtime.send(.monitorAttached(HeadMonitor(info)))
         case .detached(let head):
             log.info("Head \(head) detached")
-            detach(head: head)
+            runtime.send(.monitorDetached(head: head))
         case .stateChanged(let state, let message):
             if state != engineState || message != engineMessage {
                 log.info("Engine state \(state.rawValue): \(message, privacy: .public)")
@@ -191,25 +284,67 @@ final class DisplayHost {
             engineState = state
             engineMessage = message
         }
-        updateCursorTargets()
         pollGamma()
-        onChange?()
+        changes.request()
     }
 
-    /// Points the hardware cursor at every head whose dock draws the pointer itself.
-    private func updateCursorTargets() {
-        cursor.setTargets(heads.values.compactMap { head in
-            guard head.monitor.hardwareCursor, let display = head.display else { return nil }
-            return CursorTracker.Target(head: head.monitor.head, displayID: display.displayID,
-                                        width: head.monitor.width, height: head.monitor.height)
+    // MARK: - Displays
+
+    /// Makes the virtual display for `monitor`, claiming its identity against the monitors on the other heads.
+    /// A claim that is refused means the identity is still held by a display being released: the head waits.
+    private func createDisplay(monitor: HeadMonitor, orientation: DisplayOrientation, attached: [AttachedMonitor],
+                               onTerminated: @escaping @MainActor () -> Void) -> DisplayCreation<VirtualDisplay> {
+        guard let claim = identities.claim(reported: monitor.reportedIdentity, head: monitor.head,
+                                           attached: attached, configured: configuredIdentities) else {
+            log.info("Head \(monitor.head): its identity is still held by a display being removed; waiting")
+            return .identityHeld
+        }
+        if claim.identity != monitor.reportedIdentity {
+            log.info("Head \(monitor.head) reports the same identity as another display; giving it a distinct serial")
+        }
+        do {
+            let display = try VirtualDisplay(monitor: monitor, orientation: orientation, claim: claim,
+                                             onTerminated: onTerminated)
+            return .created(display, claim.identity)
+        } catch {
+            log.error("\(String(describing: error), privacy: .public)")
+            return .failed("\(error)")
+        }
+    }
+
+    /// The identities macOS already keeps per-display settings for (ConfiguredMonitors). A generated serial avoids
+    /// them, so it never inherits another monitor's settings. Portrait entries name the same identity.
+    private var configuredIdentities: Set<DisplayIdentity> {
+        Set((UserDefaults.standard.stringArray(forKey: Self.configuredMonitorsKey) ?? []).compactMap { entry in
+            let suffix = MonitorKey.portraitRecordSuffix
+            let identityKey = entry.hasSuffix(suffix) ? String(entry.dropLast(suffix.count)) : entry
+            return DisplayIdentity(configurationKey: identityKey)
         })
+    }
+
+    // MARK: - Cursor, gamma
+
+    /// Points the hardware cursor at the heads whose dock draws the pointer. An empty list hides the dock's cursor.
+    private func publishCursorTargets(_ targets: [(spec: CursorTargetSpec, display: VirtualDisplay)]) {
+        lastCursorTargets = targets.map { target in
+            CursorTracker.Target(head: target.spec.head, displayID: target.display.displayID,
+                                 width: target.spec.width, height: target.spec.height)
+        }
+        cursor.setTargets(lastCursorTargets)
+    }
+
+    /// Re-applies the cursor targets so CursorTracker reads the displays' current bounds.
+    private func refreshCursorTargets() {
+        guard !lastCursorTargets.isEmpty else { return }
+        cursor.setTargets(lastCursorTargets)
     }
 
     /// Hands each virtual display's gamma transfer table to the engine. ScreenCaptureKit returns
     /// pre-gamma pixels, so tint apps that set the table (CGSetDisplayTransferByTable) would
     /// otherwise not reach the dock. Polls every 0.5 s while any head has a virtual display.
     private func pollGamma() {
-        let active = heads.values.contains { $0.display != nil }
+        let statuses = runtime.controller.statuses
+        let active = statuses.contains { $0.display != nil }
         if active, gammaTimer == nil {
             gammaTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.pollGamma() }
@@ -219,10 +354,15 @@ final class DisplayHost {
             gammaTimer = nil
             return
         }
-        for (head, state) in heads {
-            guard let display = state.display, let lut = Self.gammaTable(of: display.displayID),
-                  lut != state.sentGamma else { continue }
-            heads[head]?.sentGamma = lut
+        for status in statuses {
+            let head = status.monitor.head
+            if status.captureAttempt != gammaAttempts[head] {
+                gammaAttempts[head] = status.captureAttempt
+                sentGamma[head] = nil
+            }
+            guard let generation = status.display, let display = runtime.display(generation),
+                  let lut = Self.gammaTable(of: display.displayID), lut != sentGamma[head] else { continue }
+            sentGamma[head] = lut
             engine.setGamma(head: head, lut: lut)
         }
     }
@@ -256,173 +396,35 @@ final class DisplayHost {
         return lut
     }
 
-    private func attach(_ monitor: MonitorInfo, rebuiltAfterTermination: Bool = false) {
-        if heads[monitor.head] != nil {
-            detach(head: monitor.head)
-        }
-        var head = Head(monitor: monitor, rebuiltAfterTermination: rebuiltAfterTermination)
-        // The same monitor coming back on the same socket within the grace period (a dock reset or
-        // a replugged cable) gets its virtual display back, so macOS does not rearrange windows.
-        if let kept = retained.removeValue(forKey: monitor.head) {
-            kept.release.cancel()
-            if kept.monitor.sameDisplay(as: monitor) {
-                head.display = kept.display
-                heads[monitor.head] = head
-                log.info("Head \(monitor.head) reattached to its existing virtual display")
-                startCapture(head: monitor.head)
-                return
-            }
-        }
-        do {
-            head.display = try VirtualDisplay(monitor: monitor) { [weak self] in
-                self?.displayTerminated(head: monitor.head)
-            }
-        } catch {
-            head.problem = "\(error)"
-            log.error("\(String(describing: error), privacy: .public)")
-        }
-        heads[monitor.head] = head
-        if head.display != nil {
-            startCapture(head: monitor.head, configuringModes: true)
-        }
-    }
+    // MARK: - Capture results
 
-    /// Stops a head. Its virtual display is kept for `reconnectGrace` so a quick reconnect can
-    /// reuse it, unless `keepDisplay` is false.
-    private func detach(head: UInt8, keepDisplay: Bool = true) {
-        guard let state = heads.removeValue(forKey: head) else { return }
-        state.startTask?.cancel()
-        state.retryTask?.cancel()
-        let capture = state.capture
-        if keepDisplay, let display = state.display {
-            let release = Task { [weak self] in
-                try? await Task.sleep(for: Self.reconnectGrace)
-                guard !Task.isCancelled, let self, self.retained[head]?.display === display else { return }
-                self.retained.removeValue(forKey: head)
-                log.info("Head \(head) did not come back; virtual display released")
-            }
-            retained[head] = Retained(display: display, monitor: state.monitor, release: release)
-            Task { await capture?.stop() }
-            return
-        }
-        let display = state.display
-        // Stop the stream before the display it captures disappears.
-        Task {
-            await capture?.stop()
-            withExtendedLifetime(display) {}
-            log.info("Head \(head) torn down")
-        }
-    }
-
-    private func displayTerminated(head: UInt8) {
-        guard let state = heads[head] else { return }
-        log.error("Window server removed the virtual display for head \(head)")
-        detach(head: head, keepDisplay: false)
-        if state.rebuiltAfterTermination {
-            var lost = Head(monitor: state.monitor)
-            lost.problem = "macOS removed the virtual display"
-            heads[head] = lost
-        } else {
-            attach(state.monitor, rebuiltAfterTermination: true)
-        }
-        onChange?()
-    }
-
-    /// Starts capture for `head`. With `configuringModes`, first waits for the new display's mode
-    /// list (the window server fills it in asynchronously) and applies the default mode.
-    private func startCapture(head: UInt8, configuringModes: Bool = false) {
-        guard var state = heads[head], let display = state.display else { return }
-        let token = UUID()
-        let monitor = state.monitor
-        let engine = self.engine
-        state.captureToken = token
-        state.problem = nil
-        // A restarted capture may follow a new engine mailbox; send the gamma table again.
-        state.sentGamma = nil
-        let onStop: @Sendable (Error) -> Void = { [weak self] error in
-            Task { @MainActor in self?.captureStopped(head: head, token: token, error: error) }
-        }
-        state.startTask = Task { [weak self] in
-            do {
-                if configuringModes {
-                    try await self?.configureModes(of: display, for: monitor)
-                }
-                let capture = try await DisplayCapture.start(displayID: display.displayID, monitor: monitor,
-                                                             engine: engine, onStop: onStop)
-                guard let self, self.heads[head]?.captureToken == token else {
-                    await capture.stop()
-                    return
-                }
-                self.heads[head]?.capture = capture
-                self.heads[head]?.startTask = nil
-                if self.heads[head]?.retryAttempt ?? 0 > 0 {
-                    log.info("Capture for head \(head) restarted")
-                }
-                self.heads[head]?.retryAttempt = 0
-            } catch {
-                guard let self, self.heads[head]?.captureToken == token else { return }
-                self.heads[head]?.startTask = nil
-                self.recordCaptureFailure(head: head, error: error)
-                self.scheduleCaptureRetry(head: head)
-            }
-            self?.onChange?()
-        }
-        heads[head] = state
-        pollGamma()
-    }
-
-    private func captureStopped(head: UInt8, token: UUID, error: Error) {
-        guard heads[head]?.captureToken == token else { return }
-        // The stop can arrive before the start task stores the stream. Retire that attempt so a
-        // late success is discarded (and its dead stream stopped) instead of counting as running.
-        heads[head]?.captureToken = UUID()
-        heads[head]?.startTask?.cancel()
-        heads[head]?.startTask = nil
-        heads[head]?.capture = nil
-        recordCaptureFailure(head: head, error: error)
-        scheduleCaptureRetry(head: head)
-        onChange?()
-    }
-
-    /// Retries capture after 1, 2, 4… seconds (capped at 30) until it runs again or the head goes
-    /// away. A wake or unlock restarts it immediately through `resumeCapture()`.
-    private func scheduleCaptureRetry(head: UInt8) {
-        guard !screenRecordingDenied, let state = heads[head], state.display != nil else { return }
-        state.retryTask?.cancel()
-        let delay = min(30, 1 << min(state.retryAttempt, 5))
-        heads[head]?.retryAttempt = state.retryAttempt + 1
-        heads[head]?.retryTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled, let self, let state = self.heads[head],
-                  state.capture == nil, state.startTask == nil, !self.screenRecordingDenied else { return }
-            self.heads[head]?.retryTask = nil
-            log.info("Retrying capture for head \(head) (attempt \(state.retryAttempt))")
-            self.startCapture(head: head)
-        }
-    }
-
-    private func recordCaptureFailure(head: UInt8, error: Error) {
+    /// Maps a capture error to the controller's failure kinds.
+    nonisolated private static func failure(for error: Error) -> CaptureFailure {
         let nsError = error as NSError
         if nsError.domain == SCStreamErrorDomain, nsError.code == SCStreamError.Code.userDeclined.rawValue {
-            screenRecordingDenied = true
-            heads[head]?.problem = "Screen Recording permission is required"
-        } else {
-            heads[head]?.problem = (error as? DisplayCapture.CaptureError)?.description ?? error.localizedDescription
+            return .permissionDenied
         }
-        log.error("Capture for head \(head) failed: \(String(describing: error), privacy: .public)")
+        if case .unusableFrames(_, let reason) = error as? DisplayCapture.CaptureError {
+            return .unusableFrames(reason: reason)
+        }
+        return .failed((error as? DisplayCapture.CaptureError)?.description ?? error.localizedDescription)
     }
 
-    /// Waits for the new display's mode list, logs it, and applies the default mode the first time
-    /// a given monitor shows up. macOS itself would pick the largest HiDPI mode ("looks like"
-    /// 2560x1440 on a 4K panel); after the first time, whatever the user chose in System Settings
-    /// wins, since macOS restores it by vendor, product and serial.
-    private func configureModes(of display: VirtualDisplay, for monitor: MonitorInfo) async throws {
-        let native = (width: monitor.width, height: monitor.height)
-        var defaultMode = display.defaultMode(nativeWidth: native.width, nativeHeight: native.height)
-        for _ in 0..<50 where defaultMode == nil {
-            try await Task.sleep(for: .milliseconds(100))
-            defaultMode = display.defaultMode(nativeWidth: native.width, nativeHeight: native.height)
+    /// Waits for the new display's mode list, logs it, and sets the default HiDPI mode: "looks like" half of native.
+    /// macOS would otherwise pick the largest HiDPI mode ("looks like" 2560x1440 on a 4K panel). Whether the
+    /// mode has been recorded already is decided by the controller, not here.
+    /// Runs as the display's ledger operation (HeadRuntime). Cancellation (the display is being released) ends the wait
+    /// at once, and nothing is changed after it: the mode is set only if the setup has not been cancelled.
+    @MainActor
+    private static func configureMode(of display: VirtualDisplay, for monitor: HeadMonitor,
+                                      orientation: DisplayOrientation) async -> ModeOutcome {
+        // A portrait head's default is looked up at its logical (portrait) size.
+        let logical = RotationGeometry(physical: monitor.physical, orientation: orientation).logical
+        let native = (width: UInt32(logical.width), height: UInt32(logical.height))
+        let defaultMode = await PollWait.firstValue(retries: 50, interval: .milliseconds(100)) {
+            display.defaultMode(nativeWidth: native.width, nativeHeight: native.height)
         }
+        guard !Task.isCancelled else { return .failed("the display was released") }
 
         let modes = display.availableModes()
             .filter { $0.isUsableForDesktopGUI() }
@@ -435,16 +437,14 @@ final class DisplayHost {
 
         guard let defaultMode else {
             log.error("No HiDPI mode backed by \(native.width)x\(native.height) on display \(display.displayID)")
-            return
+            return .failed("no HiDPI mode backed by \(native.width)×\(native.height)")
         }
-        let identity = String(format: "%04x-%04x-%08x", monitor.vendorID, monitor.productCode, monitor.serial)
-        let defaults = UserDefaults.standard
-        var configured = defaults.stringArray(forKey: Self.configuredMonitorsKey) ?? []
-        guard !configured.contains(identity) else { return }
-        if display.setMode(defaultMode) {
-            configured.append(identity)
-            defaults.set(configured, forKey: Self.configuredMonitorsKey)
-            log.info("Display \(display.displayID) set to looks-like \(defaultMode.width)x\(defaultMode.height)")
+        // The last check before the mode changes: a setup cancelled while it was listing modes changes nothing.
+        guard !Task.isCancelled else { return .failed("the display was released") }
+        guard display.setMode(defaultMode) else {
+            return .failed("macOS refused the \(defaultMode.width)×\(defaultMode.height) mode")
         }
+        log.info("Display \(display.displayID) set to looks-like \(defaultMode.width)x\(defaultMode.height)")
+        return .applied
     }
 }

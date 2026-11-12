@@ -28,6 +28,7 @@ LinkLite uses that permission only to capture the virtual displays it created fo
 LinkLite stores its settings in its preferences (`UserDefaults`, domain `com.ball.linklite`):
 
 - `ConfiguredMonitors`: a list of monitor identities, each made of the monitor's vendor ID, product code, and serial number as reported in its EDID (or a hash of the serial text, for monitors that report their serial only as text). LinkLite applies its default "looks like" resolution to a monitor the first time it sees it and records the monitor here, so a resolution you choose later in System Settings is not overwritten.
+- `DisplayIdentityRecords`: for monitors whose EDIDs report the same identity, which dock socket owns that identity, which identities were seen twice, and the serial number derived for each socket. It holds only identity values and dock socket numbers: no monitor names, EDID contents or settings.
 - Sparkle's update state, under keys starting with `SU`: when it last checked, whether updates download automatically, and a random number Sparkle uses locally to stagger phased rollouts. None of it is sent anywhere.
 
 Downloaded updates are kept in `~/Library/Caches/com.ball.linklite` until they are installed.

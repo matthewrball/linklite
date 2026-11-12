@@ -2,6 +2,7 @@
 
 import CDLLite
 import Foundation
+import LinkLiteCore
 
 /// A dock monitor as reported by the engine, copied out of the callback's borrowed DLLMonitor.
 struct MonitorInfo: Sendable, Equatable {
@@ -40,6 +41,11 @@ struct MonitorInfo: Sendable, Equatable {
         head == other.head && vendorID == other.vendorID && productCode == other.productCode
             && serial == other.serial && width == other.width && height == other.height
             && refreshHz == other.refreshHz
+    }
+
+    /// The vendor, product and serial the monitor's EDID reports.
+    var reportedIdentity: DisplayIdentity {
+        DisplayIdentity(vendorID: vendorID, productCode: productCode, serial: serial)
     }
 
     /// Refresh rate to offer macOS and to pace capture at; 60 Hz if the engine reports none.
@@ -185,12 +191,15 @@ final class EngineHandle: @unchecked Sendable {
         bgra.withUnsafeBufferPointer { dll_engine_set_cursor(engine, $0.baseAddress, width, height, hotX, hotY) }
     }
 
-    /// Reports the pointer's hotspot on `head` (dock mode pixels), or on no head when `head < 0`.
-    func moveCursor(head: Int32, x: Int32, y: Int32) {
+    /// Reports the pointer's hotspot on `head` (dock mode pixels), or on no head when `head < 0` (which hides
+    /// the dock cursor). Returns false if the engine is not running, so the report was not delivered.
+    @discardableResult
+    func moveCursor(head: Int32, x: Int32, y: Int32) -> Bool {
         pthread_rwlock_rdlock(lock)
         defer { pthread_rwlock_unlock(lock) }
-        guard let engine else { return }
+        guard let engine else { return false }
         dll_engine_move_cursor(engine, head, x, y)
+        return true
     }
 
     /// Performance counters accumulated since the previous call, which resets them: engine-wide,

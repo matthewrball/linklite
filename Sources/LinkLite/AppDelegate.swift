@@ -2,6 +2,7 @@
 
 import AppKit
 import CDLLite
+import LinkLiteRotation
 import os
 import ServiceManagement
 
@@ -34,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.checkForUpdates = { [weak self] in self?.checkForUpdates() }
         model.openScreenRecordingSettings = { [weak self] in self?.openScreenRecordingSettings() }
         model.quit = { [weak self] in self?.quit() }
+        model.setOrientation = { [weak self] head, orientation in self?.host.setOrientation(orientation, forHead: head) }
         panel.onShow = { [weak self] in
             self?.host.refreshScreenRecordingAccess()
             self?.refreshPanel()
@@ -68,6 +70,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             })
         }
+        // The user returns from System Settings after granting Screen Recording: check again, without prompting.
+        workspaceObservers.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.host.refreshScreenRecordingAccess() }
+        })
         // Locking the screen stops every ScreenCaptureKit stream; restart them as soon as the
         // user is back, rather than waiting for the next scheduled retry.
         workspaceObservers.append(center.addObserver(
@@ -104,6 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         model.message = host.engineMessage
+        model.stopProblem = host.stopProblem
         model.monitors = host.heads.values
             .sorted { $0.monitor.head < $1.monitor.head }
             .map { head in
@@ -112,7 +121,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     id: monitor.head,
                     name: monitor.name,
                     detail: "\(monitor.width) × \(monitor.height) · \(monitor.effectiveRefreshHz) Hz",
-                    problem: head.problem
+                    problem: head.problem,
+                    waiting: head.waitingForIdentity,
+                    capturing: head.captureRunning,
+                    orientation: head.orientation,
+                    rotationScope: host.rotationScope(forHead: monitor.head) ?? .followsMonitor,
+                    isLive: head.hasUsableFrame
                 )
             }
         let login = SMAppService.mainApp.status
