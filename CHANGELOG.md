@@ -2,7 +2,14 @@
 
 All notable changes to LinkLite are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.17] - 2026-11-13
+
+### Security
+
+- LinkLite will not capture the built-in display, or a dock display that is mirroring it. A monitor timing outside 480–5120 pixels and 1–240 Hz is not programmed and does not become a virtual display. Monitor names from the dock are reduced to printable ASCII.
+- Updates stay on the built-in GitHub feed. A download must be an HTTPS GitHub release of `LinkLite-*.dmg` for this repository, at most 64 MiB; release notes are not fetched. A defaults override cannot redirect the feed.
+- A USB device's kernel drivers are not detached until LinkLite has accepted it as a dock it drives. An oversize USB reply is discarded instead of being read past its buffer.
+- Release builds are signed with hardened runtime and an entitlements file that grants no exceptions.
 
 ### Added (beta, not run on a dock)
 

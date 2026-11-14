@@ -70,6 +70,10 @@ let package = Package(
         .testTarget(
             name: "LinkLiteCoreTests",
             dependencies: ["LinkLiteCore"]
+        ),
+        .testTarget(
+            name: "LinkLiteTests",
+            dependencies: ["LinkLite"]
         )
     ]
 )

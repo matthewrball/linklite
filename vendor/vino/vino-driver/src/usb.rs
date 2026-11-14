@@ -186,11 +186,21 @@ impl InShared {
     }
 }
 
+/// Bytes of a completed IN transfer that are inside the buffer this process allocated.
+/// `actual_length` is reported by libusb; a negative or oversize value must not become a slice.
+fn received_len(actual: i32, declared: i32) -> Result<usize, ()> {
+    if declared <= 0 || declared > RECV_BUF_LEN as i32 || actual < 0 || actual > declared {
+        return Err(());
+    }
+    Ok(actual as usize)
+}
+
 /// libusb completion callback for an EP 0x84 IN transfer. Runs on whichever
 /// thread is inside `libusb_handle_events`.
 extern "system" fn ep84_complete(transfer: *mut libusb_transfer) {
     // SAFETY: `transfer` is a live transfer we allocated; `user_data` points at
     // the `InShared` boxed in the owning `AsyncIn`, which outlives all transfers.
+    // The slice below is bounded by `received_len` to the posted buffer.
     unsafe {
         let t = &*transfer;
         let shared = &*(t.user_data as *const InShared);
@@ -198,7 +208,14 @@ extern "system" fn ep84_complete(transfer: *mut libusb_transfer) {
             && !shared.closing.load(Ordering::Acquire)
             && !shared.overflowed.load(Ordering::Acquire)
         {
-            let n = t.actual_length as usize;
+            let n = match received_len(t.actual_length, t.length) {
+                Ok(n) => n,
+                Err(()) => {
+                    shared.overflowed.store(true, Ordering::Release);
+                    shared.inflight.fetch_sub(1, Ordering::AcqRel);
+                    return;
+                }
+            };
             if n > 0 && !shared.enqueue(std::slice::from_raw_parts(t.buffer, n)) {
                 shared.inflight.fetch_sub(1, Ordering::AcqRel);
                 return;
@@ -370,6 +387,30 @@ impl Dock {
 
         let (handle, product) = find_open(&ctx)?;
 
+        // Identify before detaching kernel drivers. GET_DESCRIPTOR does not need an interface
+        // claim. If the device does not answer until it is configured, select configuration 1
+        // and ask once more — still without detaching drivers — so a declined device is not
+        // left with its drivers unbound. The tested M/Connect 2 (17e9:600f) is not in the
+        // product-id quirk table; it is accepted only when its identity descriptor names a family.
+        let mut identity = read_identity(&handle);
+        if identity.is_none() {
+            let _ = handle.set_active_configuration(1);
+            identity = read_identity(&handle);
+        }
+        let family = identity.as_ref().and_then(Identity::family);
+        if family.is_none() {
+            eprintln!("[usb] identity unreadable; placing {product:04x} by its product id");
+        }
+        let Some(placement) = place(family, product) else {
+            match identity.as_ref() {
+                Some(id) => eprintln!("[usb] {id} is not a device this stack drives yet"),
+                None => {
+                    eprintln!("[usb] no identity descriptor and no quirk entry for {product:04x}")
+                }
+            }
+            return Err(Error::DeviceNotFound);
+        };
+
         // Chimera owns the complete display function for the lifetime of this
         // handle. Detach stale interface drivers before selecting the known
         // D6000 configuration.
@@ -384,25 +425,6 @@ impl Dock {
         handle.claim_interface(0).map_err(map_err)?;
         let _ = handle.set_alternate_setting(0, 0);
 
-        // What this hardware is, asked of the hardware: one standard GET_DESCRIPTOR, no session
-        // and no crypto. A dock that names a family nobody here drives is declined rather than
-        // guessed at, because the way a dock rejects a guess is to reset itself. A dock that
-        // cannot be *asked* falls back to the product-ID quirk table, so a transient descriptor
-        // failure does not cost a known dock its displays.
-        let identity = read_identity(&handle);
-        let family = identity.as_ref().and_then(Identity::family);
-        if family.is_none() {
-            eprintln!("[usb] identity unreadable; placing {product:04x} by its product id");
-        }
-        let Some(placement) = place(family, product) else {
-            match identity.as_ref() {
-                Some(id) => eprintln!("[usb] {id} is not a device this stack drives yet"),
-                None => {
-                    eprintln!("[usb] no identity descriptor and no quirk entry for {product:04x}")
-                }
-            }
-            return Err(Error::DeviceNotFound);
-        };
         if let Some(id) = identity.as_ref() {
             eprintln!("[usb] {id} running firmware {}", id.version);
         }
@@ -1024,6 +1046,35 @@ mod tests {
             receiver.recv(Duration::ZERO),
             Err(Error::Usb(rusb::Error::Overflow))
         ));
+    }
+
+    #[test]
+    fn received_len_rejects_negative_and_oversize() {
+        assert_eq!(received_len(4, 8).unwrap(), 4);
+        assert_eq!(received_len(0, 8).unwrap(), 0);
+        assert!(received_len(-1, 8).is_err());
+        assert!(received_len(9, 8).is_err());
+        assert!(received_len(8, RECV_BUF_LEN as i32 + 1).is_err());
+    }
+
+    #[test]
+    fn oversized_in_completion_fails_closed_without_copying() {
+        let state = Box::new(shared(1));
+        let mut buffer = vec![0xa5u8; RECV_BUF_LEN].into_boxed_slice();
+        let transfer = unsafe { libusb_alloc_transfer(0) };
+        assert!(!transfer.is_null());
+        unsafe {
+            (*transfer).user_data = (&*state as *const InShared).cast_mut().cast();
+            (*transfer).buffer = buffer.as_mut_ptr();
+            (*transfer).length = buffer.len() as c_int;
+            (*transfer).actual_length = buffer.len() as c_int + 64;
+            (*transfer).status = LIBUSB_TRANSFER_COMPLETED;
+        }
+        ep84_complete(transfer);
+        assert!(state.overflowed.load(Ordering::Acquire));
+        assert_eq!(state.inflight.load(Ordering::Acquire), 0);
+        assert!(buffer.iter().all(|&byte| byte == 0xa5));
+        unsafe { libusb_free_transfer(transfer) };
     }
 
     #[test]

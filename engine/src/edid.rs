@@ -75,7 +75,7 @@ pub fn parse(edid: &[u8]) -> Result<Monitor, EdidError> {
             })
             .filter(|text| !text.is_empty())
     };
-    let name = text(0xfc);
+    let name = text(0xfc).as_deref().and_then(display_name);
 
     let preferred = descriptors()
         .find_map(detailed_timing)
@@ -128,6 +128,26 @@ fn detailed_timing(d: &[u8]) -> Option<Timing> {
         refresh_hz: ((clock_hz + u64::from(total) / 2) / u64::from(total)) as u32,
         pixel_clock_khz: clock_10khz * 10,
     })
+}
+
+/// Modes LinkLite will program and capture. A malicious EDID can ask for a 1×1 display or a
+/// refresh of hundreds of megahertz; neither is a dock this stack drives, and the large case
+/// would pin capture and WindowServer. Keep the bounds identical to `MonitorLimits` in the app.
+pub fn acceptable_desktop_mode(timing: &Timing) -> bool {
+    const MIN_EDGE: u32 = 480;
+    const MAX_EDGE: u32 = 5120;
+    const MAX_HZ: u32 = 240;
+    (MIN_EDGE..=MAX_EDGE).contains(&timing.width)
+        && (MIN_EDGE..=MAX_EDGE).contains(&timing.height)
+        && (1..=MAX_HZ).contains(&timing.refresh_hz)
+}
+
+/// Printable ASCII only. The product-name descriptor is device-controlled and is shown to the user.
+fn display_name(raw: &str) -> Option<String> {
+    let name: String = raw.chars().filter(|c| c.is_ascii_graphic() || *c == ' ').collect();
+    let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    let name: String = name.chars().take(32).collect();
+    (!name.is_empty()).then_some(name)
 }
 
 #[cfg(test)]
@@ -221,5 +241,25 @@ mod tests {
             edid[127] = 0u8.wrapping_sub(edid.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)));
             assert_eq!(parse(&edid), Err(EdidError::NoPreferredTiming));
         }
+    }
+
+    #[test]
+    fn strips_control_characters_from_the_product_name() {
+        let mut edid = sample();
+        edid[72 + 5..72 + 18].copy_from_slice(b"HP\x01Z27\tk G3\n ");
+        edid[127] = 0;
+        edid[127] = 0u8.wrapping_sub(edid.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)));
+        assert_eq!(parse(&edid).unwrap().name.as_deref(), Some("HPZ27k G3"));
+    }
+
+    #[test]
+    fn rejects_timings_that_must_not_become_a_display() {
+        let ok = Timing { width: 3840, height: 2160, refresh_hz: 60, pixel_clock_khz: 533_250 };
+        assert!(acceptable_desktop_mode(&ok));
+        assert!(!acceptable_desktop_mode(&Timing { width: 1, ..ok }));
+        assert!(!acceptable_desktop_mode(&Timing { height: 8, ..ok }));
+        assert!(!acceptable_desktop_mode(&Timing { refresh_hz: 0, ..ok }));
+        assert!(!acceptable_desktop_mode(&Timing { refresh_hz: 655_350_000, ..ok }));
+        assert!(!acceptable_desktop_mode(&Timing { width: 7680, height: 4320, ..ok }));
     }
 }

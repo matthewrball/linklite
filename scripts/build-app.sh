@@ -76,7 +76,27 @@ fi
 sign "$sparkle/Versions/B/Autoupdate"
 sign "$sparkle/Versions/B/Updater.app"
 sign "$sparkle"
-sign "$app"
+# Entitlements apply to the app executable only. Sparkle keeps the signature from the lines above.
+sign --entitlements "Resources/LinkLite.entitlements" "$app"
 
 codesign --verify --deep --strict --verbose=2 "$app"
+flags="$(codesign -d --verbose=4 "$app" 2>&1)"
+printf '%s\n' "$flags" | grep -q 'runtime' || { echo "hardened runtime is not enabled" >&2; exit 1; }
+ents="$(codesign -d --entitlements :- "$app" 2>&1 || true)"
+for forbidden in \
+    com.apple.security.cs.disable-library-validation \
+    com.apple.security.cs.allow-jit \
+    com.apple.security.cs.allow-unsigned-executable-memory \
+    com.apple.security.cs.allow-dyld-environment-variables \
+    com.apple.security.cs.disable-executable-page-protection \
+    com.apple.security.get-task-allow
+do
+    if printf '%s\n' "$ents" | grep -q "<key>$forbidden</key>"; then
+        echo "refusing to ship with entitlement $forbidden" >&2
+        exit 1
+    fi
+done
+plist_feed="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' Resources/Info.plist)"
+grep -q "static let feedURL = \"$plist_feed\"" Sources/LinkLite/UpdateManager.swift \
+    || { echo "SUFeedURL and UpdatePolicy.feedURL diverged" >&2; exit 1; }
 echo "Built $app"

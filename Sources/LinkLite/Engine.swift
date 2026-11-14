@@ -31,7 +31,8 @@ struct MonitorInfo: Sendable, Equatable {
         productCode = monitor.product_code
         serial = monitor.serial
         let reported = monitor.name.map { String(cString: $0) } ?? ""
-        name = reported.isEmpty ? "DisplayLink Monitor \(Int(monitor.head) + 1)" : reported
+        let fallback = "DisplayLink Monitor \(Int(monitor.head) + 1)"
+        name = MonitorLimits.displayName(reported, fallback: fallback)
         hardwareCursor = monitor.hardware_cursor
     }
 
