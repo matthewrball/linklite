@@ -35,6 +35,10 @@ final class VirtualDisplay {
     /// the window server removes it.
     init(monitor: HeadMonitor, orientation: DisplayOrientation = .standard, claim: IdentityClaim,
          onTerminated: @escaping @MainActor () -> Void) throws {
+        guard MonitorLimits.accepts(width: monitor.width, height: monitor.height,
+                                    refreshHz: monitor.refreshHz) else {
+            throw CreationError(description: "Monitor timing \(monitor.width)x\(monitor.height)@\(monitor.refreshHz) Hz is outside the supported range")
+        }
         let identity = claim.identity
         let geometry = RotationGeometry(physical: PixelSize(width: Int(monitor.width), height: Int(monitor.height)),
                                         orientation: orientation)
@@ -43,9 +47,12 @@ final class VirtualDisplay {
                 PixelSize(width: Int($0.width), height: Int($0.height))
             }
         ).map { (width: UInt32($0.width), height: UInt32($0.height)) }
+        guard !modes.isEmpty else {
+            throw CreationError(description: "Monitor timing \(monitor.width)x\(monitor.height) produced no display mode")
+        }
         let descriptor = CGVirtualDisplayDescriptor()
         descriptor.queue = DispatchQueue.main
-        descriptor.name = monitor.name
+        descriptor.name = MonitorLimits.displayName(monitor.name, fallback: "DisplayLink monitor")
         descriptor.maxPixelsWide = modes.map(\.width).max() ?? UInt32(geometry.logical.width)
         descriptor.maxPixelsHigh = modes.map(\.height).max() ?? UInt32(geometry.logical.height)
         let millimeters = monitor.widthMillimeters > 0 && monitor.heightMillimeters > 0
@@ -98,10 +105,21 @@ final class VirtualDisplay {
     /// on macOS 26, without them the window server silently drops every HiDPI variant above
     /// 960x540 from the list.
     static func modeSizes(nativeWidth: UInt32, nativeHeight: UInt32) -> [(width: UInt32, height: UInt32)] {
-        let scaled: [(UInt32, UInt32)] = [(4, 3), (6, 5), (16, 15), (2, 3), (1, 2)].map { numerator, denominator in
-            (even(nativeWidth * numerator / denominator), even(nativeHeight * numerator / denominator))
+        let ratios: [(UInt32, UInt32)] = [(4, 3), (6, 5), (16, 15), (2, 3), (1, 2)]
+        let scaled = ratios.compactMap { ratio -> (UInt32, UInt32)? in
+            guard let width = scaledEven(nativeWidth, numerator: ratio.0, denominator: ratio.1),
+                  let height = scaledEven(nativeHeight, numerator: ratio.0, denominator: ratio.1),
+                  width >= 2, height >= 2 else { return nil }
+            return (width, height)
         }
         return [(nativeWidth, nativeHeight)] + scaled
+    }
+
+    /// `value * numerator` must not wrap. A rejected scale is omitted; the native size remains.
+    private static func scaledEven(_ value: UInt32, numerator: UInt32, denominator: UInt32) -> UInt32? {
+        let (product, overflow) = value.multipliedReportingOverflow(by: numerator)
+        guard !overflow, denominator != 0 else { return nil }
+        return even(product / denominator)
     }
 
     private static func even(_ value: UInt32) -> UInt32 { value & ~1 }

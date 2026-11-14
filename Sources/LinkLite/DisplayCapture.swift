@@ -21,6 +21,9 @@ private let log = Logger(subsystem: "com.ball.linklite", category: "capture")
 final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
     enum CaptureError: Error, CustomStringConvertible {
         case displayNotShareable(CGDirectDisplayID)
+        case refusesBuiltin
+        case mirrorsBuiltin
+        case unsupportedMode(UInt32, UInt32, UInt32)
         case unusableFrames(head: UInt8, reason: String)
         case stopFailed(head: UInt8, underlying: String)
 
@@ -28,6 +31,12 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
             switch self {
             case .displayNotShareable(let id):
                 "Display \(id) never appeared in ScreenCaptureKit's shareable content"
+            case .refusesBuiltin:
+                "Refusing to capture the built-in display"
+            case .mirrorsBuiltin:
+                "This dock display is mirroring the built-in screen. Turn off mirroring in System Settings so that screen is not sent to the dock."
+            case .unsupportedMode(let width, let height, let refreshHz):
+                "Monitor timing \(width)×\(height) at \(refreshHz) Hz is outside the supported range"
             case .unusableFrames(let head, let reason):
                 "Head \(head) produced unusable frames (\(reason))"
             case .stopFailed(let head, let underlying):
@@ -88,10 +97,23 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
     static func start(displayID: CGDirectDisplayID, monitor: HeadMonitor, orientation: DisplayOrientation,
                       engine: EngineHandle, gate: FrameGate, onUsableFrame: @escaping @Sendable () -> Void,
                       onStop: @escaping @Sendable (Error) -> Void) async throws -> DisplayCapture {
+        // Screen Recording, once granted, can read every display. Capture only a dock display
+        // this process created, never the built-in panel, and never a mirror of that panel.
+        guard displayID != 0, CGDisplayIsBuiltin(displayID) == 0 else {
+            throw CaptureError.refusesBuiltin
+        }
+        let mirrored = CGDisplayMirrorsDisplay(displayID)
+        if mirrored != 0 && CGDisplayIsBuiltin(mirrored) != 0 {
+            throw CaptureError.mirrorsBuiltin
+        }
+        guard MonitorLimits.accepts(width: monitor.width, height: monitor.height,
+                                    refreshHz: monitor.refreshHz) else {
+            throw CaptureError.unsupportedMode(monitor.width, monitor.height, monitor.refreshHz)
+        }
         let display = try await shareableDisplay(displayID)
         let capture = DisplayCapture(head: monitor.head, monitor: monitor, orientation: orientation,
                                      engine: engine, gate: gate, onUsableFrame: onUsableFrame, onStop: onStop)
-        try await capture.begin(display: display, refreshHz: monitor.effectiveRefreshHz)
+        try await capture.begin(display: display, refreshHz: monitor.refreshHz)
         return capture
     }
 
@@ -108,6 +130,12 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
     }
 
     private func begin(display: SCDisplay, refreshHz: UInt32) async throws {
+        guard display.displayID != 0, CGDisplayIsBuiltin(display.displayID) == 0 else {
+            throw CaptureError.refusesBuiltin
+        }
+        guard MonitorLimits.accepts(width: width, height: height, refreshHz: refreshHz) else {
+            throw CaptureError.unsupportedMode(width, height, refreshHz)
+        }
         let filter = SCContentFilter(display: display, excludingWindows: [])
         let config = SCStreamConfiguration()
         // The upright size: the dock's mode for an unrotated head (a HiDPI backing store gets scaled to the
@@ -115,6 +143,7 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         config.width = policy.captureSize.width
         config.height = policy.captureSize.height
         config.pixelFormat = kCVPixelFormatType_32BGRA
+        config.capturesAudio = false
         // A dock with a hardware cursor draws the pointer itself (CursorTracker); leaving it out of the frames
         // means pointer movement sends no video at all. A rotated head has no such cursor, so the pointer
         // stays in its frames.

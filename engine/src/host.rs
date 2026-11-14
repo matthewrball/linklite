@@ -378,12 +378,22 @@ impl Shared {
             return false;
         }
         let (tiles_x, tiles_y) = a.tiles();
-        let fresh = mailbox.surface.len() != a.padded_width * 3 * a.padded_height;
+        let Some(surface_len) = a
+            .padded_width
+            .checked_mul(3)
+            .and_then(|row| row.checked_mul(a.padded_height))
+        else {
+            return false;
+        };
+        let Some(tile_count) = tiles_x.checked_mul(tiles_y) else {
+            return false;
+        };
+        let fresh = mailbox.surface.len() != surface_len;
         if fresh {
-            mailbox.surface = vec![0; a.padded_width * 3 * a.padded_height];
-            mailbox.strip_hashes = vec![0; tiles_x * tiles_y];
-            mailbox.candidates = vec![false; tiles_x * tiles_y];
-            mailbox.changed = vec![false; tiles_x * tiles_y];
+            mailbox.surface = vec![0; surface_len];
+            mailbox.strip_hashes = vec![0; tile_count];
+            mailbox.candidates = vec![false; tile_count];
+            mailbox.changed = vec![false; tile_count];
             mailbox.changed_count = 0;
             mailbox.all_changed = true;
         }
@@ -1062,6 +1072,16 @@ fn attach(
             return Ok(false);
         }
     };
+    if !edid::acceptable_desktop_mode(&monitor.preferred) {
+        report(format!(
+            "Connector {}: monitor timing {}x{}@{} Hz is outside the supported range",
+            head + 1,
+            monitor.preferred.width,
+            monitor.preferred.height,
+            monitor.preferred.refresh_hz
+        ));
+        return Ok(false);
+    }
     let mode = Mode {
         width: monitor.preferred.width as usize,
         height: monitor.preferred.height as usize,

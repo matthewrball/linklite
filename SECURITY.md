@@ -27,6 +27,14 @@ Connect only docks you trust to receive the pixels displayed on their monitors. 
 
 LinkLite runs without App Sandbox. Release builds enable hardened runtime without JIT or library-validation exceptions. Memory-safety defects therefore matter even when they require a physically attached device. The native libusb dependency includes documented descriptor-parser backports in [`vendor/libusb1-sys/README.md`](vendor/libusb1-sys/README.md); auditing Cargo package versions alone does not cover that C code.
 
+Before colleagues run a build, these controls are the ones that matter:
+
+- **Capture.** Screen Recording, once granted, lets the process read any display. LinkLite refuses to start a stream on the built-in display, or on a dock display that is mirroring it. Turn mirroring off in System Settings if a dock monitor is cloned from the laptop screen.
+- **Monitor timing.** A timing outside 480–5120 pixels on a side, or outside 1–240 Hz, is not programmed and does not become a virtual display. Product names from the monitor are reduced to printable ASCII before they are shown or logged.
+- **USB.** Kernel drivers are not detached until the device has been accepted as a dock this stack drives. A device that cannot be identified is configured once so a known dock can still answer, then left alone if it is declined. An IN transfer whose reported length is outside the posted buffer is discarded.
+- **Updates.** The feed URL is compiled into the app; a defaults write or configuration profile cannot redirect it. A download must be `https://github.com/matthewrball/linklite/releases/download/<tag>/LinkLite-<tag>.dmg`, within 64 MiB, and EdDSA-signed. Release notes are not fetched. Sparkle can still accept a same-team Developer ID signature if EdDSA verification fails; that archive still has to be one of those GitHub release URLs.
+- **What to share.** Share a Developer ID-signed, notarized DMG. An ad-hoc build is a different app to macOS, so Gatekeeper and the Screen Recording grant do not carry over, and colleagues should not be taught to bypass Gatekeeper.
+
 ## Supported versions
 
 Only the latest public release is supported for security fixes.
