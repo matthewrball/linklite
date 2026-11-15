@@ -36,6 +36,10 @@
   letter-spacing: -.035em;
 }
 
+.after-film footer.site .dom > .wordmark {
+  color: var(--cream);
+}
+
 .after-film footer.site .dom span {
   color: var(--mint);
 }
