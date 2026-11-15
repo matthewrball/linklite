@@ -169,8 +169,27 @@
   .install-section .dl { margin-bottom: 6px; }
   .install-meta { max-width: 34rem; }
   .hash { margin: 14px 0 0; font-family: ui-monospace,"SF Mono",Menlo,monospace; font-size: 12px; color: var(--faint); overflow-wrap: anywhere; }
-  .foot { display: flex; flex-wrap: wrap; gap: 12px 22px; padding: 28px max(28px,env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(28px,env(safe-area-inset-left)); border-top: 1px solid var(--line); color: var(--faint); font-size: 13px; }
-  .foot a { color: var(--sub); }
+  .foot {
+    width: 100%; max-width: 46rem; margin: 0 auto; border-top: 1px solid var(--line);
+    padding: 32px max(24px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));
+    display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: center; justify-content: space-between;
+  }
+  .foot .dom { display: inline-flex; align-items: center; gap: .7rem; font-family: ui-serif,"New York","Iowan Old Style",Georgia,serif; font-size: 22px; font-weight: 600; color: var(--cream); letter-spacing: 0; }
+  .foot .dom img { width: 34px; height: 34px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.22); }
+  .foot nav { display: flex; gap: 1.4rem; flex-wrap: wrap; font-size: 13.5px; }
+  .foot nav a { color: rgba(243,236,219,.60); text-decoration: none; }
+  .foot nav .footer-download { color: var(--mint); }
+  .foot nav a:hover,.foot .madeon a:hover { color: var(--cream); }
+  .foot .disclaimer { flex-basis: 100%; margin: 8px 0 0; font-size: 12px; color: rgba(243,236,219,.38); line-height: 1.5; display: flex; justify-content: space-between; gap: .35rem 2rem; align-items: baseline; }
+  .foot .disclaimer span { white-space: nowrap; }
+  .foot .disclaimer span:last-child { text-align: right; }
+  .foot .madeon,.foot .copy { margin: 1.4rem 0 0; font-size: 13px; color: rgba(243,236,219,.38); }
+  .foot .madeon a { color: rgba(243,236,219,.60); text-decoration: none; font-variant-numeric: tabular-nums; border-bottom: 1px solid rgba(243,236,219,.16); }
+  @media (max-width: 640px) {
+    .foot .disclaimer { flex-direction: column; align-items: flex-start; }
+    .foot .disclaimer span { white-space: normal; }
+    .foot .disclaimer span:last-child { text-align: left; }
+  }
   @media (min-width: 761px) and (max-width: 1100px) {
     .fact-grid { grid-template-columns: 1fr; gap: 28px; margin-top: 48px; }
     .benchmark-layout { grid-template-columns: 1fr; gap: 44px; }
@@ -196,7 +215,7 @@
     .page-intro { font-size: 17px; }
     .install-section { gap: 28px; }
     .install-section .dl { justify-self: start; }
-    .foot { padding: 24px max(20px,env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left)); }
+    .foot { padding-inline: max(20px,env(safe-area-inset-left)) max(20px,env(safe-area-inset-right)); }
   }
   @media (max-width: 420px) {
     .install-section .dl { width: 100%; justify-self: stretch; }
@@ -213,7 +232,7 @@
     .page-section { padding-block: 60px; }
   }
   @media (pointer: coarse) {
-    .nav .dl,.foot a { min-height: 44px; display: inline-flex; align-items: center; }
+    .nav .dl,.foot nav a { min-height: 44px; display: inline-flex; align-items: center; }
   }
   @media (prefers-reduced-motion: reduce) {
     .nav { transition: none; }
@@ -294,7 +313,18 @@
       <div><p class="eyebrow">Install the notarized beta</p><h2>Give your setup <br>a smaller driver.</h2><p class="page-intro install-meta">Apple silicon · macOS 14 or later · 0.3.17 beta <br>Quit DisplayLink Manager before opening LinkLite.</p><p class="hash">SHA-256 · ac13da97917aaf344c6cbc36414e3f77cb4e6c71d45b22374b0e21a9d7974548</p></div>
       <a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download 0.3.17</a>
     </section>
-    <footer class="foot"><span class="mark">Link<span>Lite</span></span><span>GPL-2.0-or-later · Matthew Ball</span><a href="https://github.com/matthewrball/linklite/blob/main/PRIVACY.md">Privacy</a><a href="https://github.com/matthewrball/linklite/security/policy">Security</a><a href="https://github.com/matthewrball/linklite">GitHub</a><span>Not affiliated with Synaptics or DisplayLink.</span></footer>
+    <footer class="foot">
+      <span class="dom"><img src="assets/logo.png" width="256" height="256" loading="lazy" decoding="async" alt="" aria-hidden="true">LinkLite</span>
+      <nav aria-label="Footer">
+        <a href="https://github.com/matthewrball/linklite" rel="noopener" target="_blank">GitHub</a>
+        <a href="#work">How it works</a>
+        <a href="https://github.com/matthewrball/linklite/blob/main/PRIVACY.md" rel="noopener" target="_blank">Privacy</a>
+        <a class="footer-download" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download</a>
+      </nav>
+      <p class="disclaimer"><span>Free &amp; open source under GPL-2.0-or-later.</span><span>Not affiliated with Synaptics or DisplayLink.</span></p>
+      <p class="madeon">Created on <a href="https://mempool.space/block/0000000000000000000027e3f86084fe3be979d9004bd9697c20280e94d82645" rel="noopener" target="_blank">975870</a> by <a href="https://matthewball.me/" rel="noopener" target="_blank">Matthew Ball</a></p>
+      <p class="copy">LinkLite © 2026</p>
+    </footer>
   </div>
 </main>
 <script>
