@@ -272,8 +272,9 @@ final class FakeRecorder {
         if !scriptedCreations.isEmpty {
             return .failed(scriptedCreations.removeFirst())
         }
+        // As DisplayHost: a portrait display claims the portrait identity paired with the landscape one.
         guard let claim = identities.claim(reported: monitor.reportedIdentity, head: monitor.head,
-                                           attached: attached) else {
+                                           attached: attached, portrait: orientation.swapsAxes) else {
             return .identityHeld
         }
         let display = FakeDisplay(identity: claim.identity, number: displays.count + 1)

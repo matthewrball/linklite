@@ -58,7 +58,7 @@ import Testing
     let first = try c.madeDisplay(0)
     let second = try c.madeDisplay(1)
     #expect(second.orientation == .turnedClockwise)
-    #expect(second.identity == first.identity)
+    #expect(second.identity != first.identity, "a portrait display has its own identity")
 }
 
 // MARK: - Rotation storms
@@ -183,7 +183,7 @@ import Testing
     #expect(stream.isConfirmedStopped, "the display was released only after its stream was stopped")
     #expect(stream.submittedFrames == 0)
     #expect(!c.recorder.isAlive(creation: 0))
-    #expect(try c.madeDisplay(1).identity == c.madeDisplay(0).identity)
+    #expect(try c.madeDisplay(1).identity != c.madeDisplay(0).identity, "a portrait display has its own identity")
 }
 
 /// The same monitor coming back during an in-flight start reuses the kept display, so no second identity is claimed.
@@ -268,6 +268,7 @@ import Testing
     stream.deliverFrame()
     await c.eventually("live") { c.status(0)?.hasUsableFrame == true }
 
+    await c.eventually("the mode retry is due") { c.backend.sleeps.pending.contains(.seconds(1)) }
     #expect(c.backend.sleeps.release { $0 == .seconds(1) }, "the mode retry is due after 1 s")
     await c.eventually("the mode is tried again") { c.recorder.modeCalls == 2 }
     await c.settle()

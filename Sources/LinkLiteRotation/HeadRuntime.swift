@@ -119,6 +119,9 @@ public final class HeadRuntime<Display: AnyObject & Sendable, Stream: Sendable>:
         },
         unconfirmedChanged: { [weak self] head in
             Task { @MainActor in self?.stopStateChanged(head) }
+        },
+        operationDeadline: { [sleep = platform.sleep] in
+            await sleep(HeadTiming.captureOperationTimeout)
         }
     )
 
@@ -311,6 +314,9 @@ public final class HeadRuntime<Display: AnyObject & Sendable, Stream: Sendable>:
     private func failureOf(_ error: Error) -> CaptureFailure {
         if let notConfirmed = error as? StreamStopNotConfirmed {
             return .failed(notConfirmed.errorDescription ?? "Previous capture did not confirm it stopped")
+        }
+        if error is StreamStartTimedOut {
+            return .failed("Capture did not start within \(HeadTiming.captureOperationTimeout.components.seconds) s; retrying")
         }
         return platform.failure(error)
     }

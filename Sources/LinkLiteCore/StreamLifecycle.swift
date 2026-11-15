@@ -22,6 +22,18 @@ public struct StreamStopNotConfirmed: LocalizedError, CustomStringConvertible, S
     }
 }
 
+/// A stream start that neither succeeded nor failed before the lifecycle's deadline. The attempt is given up so the
+/// key is free again; a stream the start makes later is stopped at once.
+public struct StreamStartTimedOut: LocalizedError, CustomStringConvertible, Sendable {
+    public init() {}
+
+    public var errorDescription: String? {
+        "Capture did not start in time; retrying"
+    }
+
+    public var description: String { "StreamStartTimedOut" }
+}
+
 /// The wait before each retry of a stop that failed. The first retry comes after 1 s, doubling to a 30 s cap.
 public enum StreamRetry {
     public static func interval(afterFailures failures: Int) -> Duration {
@@ -55,6 +67,13 @@ public enum StreamRetry {
 /// those are confirmed. It does not wait for stops queued after it, which a later start may hold.
 /// Clearing the last unconfirmed stream ends the key's retry task at once, even while it sleeps: a
 /// foreground start may confirm the stream first. A retry that wakes after being ended does nothing.
+///
+/// Bounded, when an `operationDeadline` is given. A platform start or stop that has not returned by the
+/// deadline would otherwise hold every later operation on its key, and so the display the key's streams use,
+/// for as long as it hangs. A stop that times out is treated as a stop that failed: the stream is kept as
+/// unconfirmed and retried, as above. A start that times out fails with `StreamStartTimedOut` and frees the key.
+/// The platform call itself cannot be cancelled. If it makes a stream later, that stream is never adopted: an
+/// operation queued then stops it (or keeps it as unconfirmed), and its caller has already closed its frame gate.
 public final class StreamLifecycle<Key: Hashable & Sendable, Stream: Sendable>: @unchecked Sendable {
     /// Identifies one start attempt.
     public struct Attempt: Hashable, Sendable {
@@ -113,26 +132,31 @@ public final class StreamLifecycle<Key: Hashable & Sendable, Stream: Sendable>: 
     private let stopStream: @Sendable (Stream) async throws -> Void
     private let retryDelay: @Sendable (Int) async -> Void
     private let unconfirmedChanged: @Sendable (Key) -> Void
+    private let operationDeadline: (@Sendable () async -> Void)?
 
     /// `stopStream` stops one running stream. It throws if the stream could not be confirmed stopped.
     /// `retryDelay` waits before a retry; its argument counts the failed attempts so far, from 1. The
     /// default follows `StreamRetry`. `unconfirmedChanged` is called, off the lock, whenever the unconfirmed
-    /// streams on a key change, so an observer can show it.
+    /// streams on a key change, so an observer can show it. `operationDeadline`, if given, returns when a start
+    /// or a stop that is still running should be given up (see "Bounded" above); nil waits for ever.
     public init(stopStream: @escaping @Sendable (Stream) async throws -> Void,
                 retryDelay: @escaping @Sendable (Int) async -> Void = { failures in
                     try? await Task.sleep(for: StreamRetry.interval(afterFailures: failures))
                 },
-                unconfirmedChanged: @escaping @Sendable (Key) -> Void = { _ in }) {
+                unconfirmedChanged: @escaping @Sendable (Key) -> Void = { _ in },
+                operationDeadline: (@Sendable () async -> Void)? = nil) {
         self.stopStream = stopStream
         self.retryDelay = retryDelay
         self.unconfirmedChanged = unconfirmedChanged
+        self.operationDeadline = operationDeadline
     }
 
     /// Starts an attempt on `key`. `make` runs once every earlier operation for `key` has finished,
     /// and only if the attempt has not been cancelled by then and every earlier stop on `key` is
     /// confirmed. The attempt is checked again after each wait, and immediately before `make`. The
     /// returned task finishes with the outcome, or throws what `make` threw, or
-    /// `StreamStopNotConfirmed` when an earlier stream is not known to have stopped.
+    /// `StreamStopNotConfirmed` when an earlier stream is not known to have stopped, or
+    /// `StreamStartTimedOut` when `make` did not return by the deadline.
     public func start(_ key: Key, make: @escaping @Sendable () async throws -> Stream)
         -> (attempt: Attempt, outcome: Task<Outcome, Error>) {
         let attempt = Attempt()
@@ -156,9 +180,22 @@ public final class StreamLifecycle<Key: Hashable & Sendable, Stream: Sendable>: 
                 forget(attempt)
                 return .cancelled
             }
+            let made = await bounded(make, late: { [self] late in
+                // Given up at the deadline: a stream made since is not adopted. It is stopped now, in order with
+                // the key's other operations, and kept as unconfirmed if that stop fails.
+                guard case .success(let stream) = late else { return }
+                _ = enqueue(key) { [self] in await stopOrRecord(stream, on: key) }
+            })
+            guard let made else {
+                // Timed out. A cancelled attempt ends as cancelled, as after any other wait.
+                let cancelled = !isWanted(attempt)
+                forget(attempt)
+                if cancelled { return .cancelled }
+                throw StreamStartTimedOut()
+            }
             let stream: Stream
             do {
-                stream = try await make()
+                stream = try made.get()
             } catch {
                 forget(attempt)
                 throw error
@@ -291,20 +328,17 @@ public final class StreamLifecycle<Key: Hashable & Sendable, Stream: Sendable>: 
         _ = lock.withLock { records.removeValue(forKey: attempt) }
     }
 
-    /// Stops `stream`. If the stop throws, the stream is kept on `key` as not confirmed stopped, and is
-    /// retried before any later start on `key` and by the key's retry task. Runs only inside an operation
-    /// queued for `key`.
+    /// Stops `stream`. If the stop throws, or has not returned by the deadline, the stream is kept on `key` as
+    /// not confirmed stopped, and is retried before any later start on `key` and by the key's retry task. Runs
+    /// only inside an operation queued for `key`.
     private func stopOrRecord(_ stream: Stream, on key: Key) async {
-        do {
-            try await stopStream(stream)
-        } catch {
-            lock.withLock {
-                nextUnconfirmedID += 1
-                unconfirmed[key, default: []].append(Unconfirmed(id: nextUnconfirmedID, stream: stream))
-                ensureRetrierLocked(key)
-            }
-            unconfirmedChanged(key)
+        if case .success = await bounded({ [self] in try await stopStream(stream) }) { return }
+        lock.withLock {
+            nextUnconfirmedID += 1
+            unconfirmed[key, default: []].append(Unconfirmed(id: nextUnconfirmedID, stream: stream))
+            ensureRetrierLocked(key)
         }
+        unconfirmedChanged(key)
     }
 
     /// Retries the stops that failed earlier on `key`, oldest first. Throws, and so lets no new stream
@@ -317,10 +351,13 @@ public final class StreamLifecycle<Key: Hashable & Sendable, Stream: Sendable>: 
     /// not confirmed stopped. Runs only inside an operation queued for `key`.
     private func retryOldestUnconfirmed(_ key: Key) async throws -> Bool {
         guard let stream = lock.withLock({ unconfirmed[key]?.first?.stream }) else { return false }
-        do {
-            try await stopStream(stream)
-        } catch {
+        switch await bounded({ [self] in try await stopStream(stream) }) {
+        case .success:
+            break
+        case .failure(let error):
             throw StreamStopNotConfirmed(reason: String(describing: error))
+        case nil:
+            throw StreamStopNotConfirmed(reason: "the stop did not return in time")
         }
         let waiters = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
             unconfirmed[key]?.removeFirst()
@@ -404,5 +441,52 @@ public final class StreamLifecycle<Key: Hashable & Sendable, Stream: Sendable>: 
                 tails[key] = nil
             }
         }
+    }
+
+    /// Runs `work` and returns its result, or nil if `operationDeadline` returns first. With no deadline it waits
+    /// for `work`. `work` is not cancelled at the deadline (a platform call need not honour it): if it returns
+    /// afterwards, its result goes to `late`. The deadline is cancelled once `work` has returned in time.
+    private func bounded<T: Sendable>(_ work: @escaping @Sendable () async throws -> T,
+                                      late: @escaping @Sendable (Result<T, Error>) -> Void = { _ in })
+        async -> Result<T, Error>? {
+        guard let operationDeadline else {
+            do { return .success(try await work()) } catch { return .failure(error) }
+        }
+        let deadline = Task { await operationDeadline() }
+        let outcome = await withCheckedContinuation { (continuation: CheckedContinuation<Result<T, Error>?, Never>) in
+            let first = FirstAnswer(continuation)
+            Task {
+                let result: Result<T, Error>
+                do { result = .success(try await work()) } catch { result = .failure(error) }
+                if !first.answer(result) { late(result) }
+            }
+            Task {
+                await deadline.value
+                first.answer(nil)
+            }
+        }
+        deadline.cancel()
+        return outcome
+    }
+}
+
+/// Resumes a continuation with the first answer given; later answers are refused.
+private final class FirstAnswer<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Never>?
+
+    init(_ continuation: CheckedContinuation<T, Never>) {
+        self.continuation = continuation
+    }
+
+    /// Resumes with `value` if no answer was given yet. Returns whether this answer was the first.
+    @discardableResult
+    func answer(_ value: T) -> Bool {
+        guard let continuation = lock.withLock({ () -> CheckedContinuation<T, Never>? in
+            defer { self.continuation = nil }
+            return self.continuation
+        }) else { return false }
+        continuation.resume(returning: value)
+        return true
     }
 }

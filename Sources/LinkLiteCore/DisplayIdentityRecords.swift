@@ -19,13 +19,18 @@ public struct DisplayIdentityRecords: Equatable, Sendable {
     /// Every reported identity (configuration key) ever claimed on any socket. A derived identity
     /// avoids all of them, so a generated serial never impersonates a monitor seen before.
     public var reported: Set<String>
+    /// The portrait identity paired with each landscape identity (both configuration keys). A portrait
+    /// display is created with its own identity, so macOS never applies a landscape display's saved mode,
+    /// arrangement or mirroring to it, or the reverse. Each value is a reservation, like `assignments`.
+    public var portraits: [String: String]
 
     public init(owners: [String: UInt8] = [:], twins: Set<String> = [], assignments: [String: String] = [:],
-                reported: Set<String> = []) {
+                reported: Set<String> = [], portraits: [String: String] = [:]) {
         self.owners = owners
         self.twins = twins
         self.assignments = assignments
         self.reported = reported
+        self.portraits = portraits
     }
 
     /// Reads the default written by `propertyList`; anything missing or malformed reads as empty.
@@ -36,12 +41,13 @@ public struct DisplayIdentityRecords: Equatable, Sendable {
         twins = Set(dictionary["twins"] as? [String] ?? [])
         assignments = dictionary["assignments"] as? [String: String] ?? [:]
         reported = Set(dictionary["reported"] as? [String] ?? [])
+        portraits = dictionary["portraits"] as? [String: String] ?? [:]
     }
 
     /// A property-list value suitable for UserDefaults.
     public var propertyList: [String: Any] {
         ["owners": owners.mapValues { Int($0) }, "twins": twins.sorted(), "assignments": assignments,
-         "reported": reported.sorted()]
+         "reported": reported.sorted(), "portraits": portraits]
     }
 
     /// The key under which the derived identity for `reported` on `head` is stored.
@@ -76,6 +82,10 @@ public struct DisplayIdentityRecords: Equatable, Sendable {
     ///   the current rules can hit this; the test `aConfiguredOwnerThatCollidesWithAReservation…` pins it.
     /// - Every owner, twin and reservation key is added to `reported`, so a historical identity is
     ///   never handed out as a generated one.
+    /// - A portrait pairing is dropped if it is malformed, is for another vendor or product, has a zero
+    ///   serial, names its own landscape identity, or names an identity that is already a monitor's, a
+    ///   landscape reservation, a landscape identity with a pairing, or an earlier pairing's portrait. The
+    ///   landscape identity gets a new portrait identity the next time it is claimed in portrait.
     ///
     /// Nothing here changes a live display: this runs when records are loaded, before any display exists.
     public func reconciled() -> DisplayIdentityRecords {
@@ -99,6 +109,20 @@ public struct DisplayIdentityRecords: Equatable, Sendable {
         result.reported = reported
             .union(owners.keys).union(twins)
             .union(assignments.keys.compactMap { Self.parseAssignmentKey($0)?.reported.configurationKey })
+        // Portraits may not collide with any identity that names a monitor or a landscape display.
+        var taken = claimed.union(result.reported.compactMap(DisplayIdentity.init(configurationKey:)))
+        taken.formUnion(portraits.keys.compactMap(DisplayIdentity.init(configurationKey:)))
+        var keptPortraits: [String: String] = [:]
+        for landscapeKey in portraits.keys.sorted() {
+            guard let value = portraits[landscapeKey],
+                  let landscape = DisplayIdentity(configurationKey: landscapeKey),
+                  let portrait = DisplayIdentity(configurationKey: value),
+                  portrait.vendorID == landscape.vendorID, portrait.productCode == landscape.productCode,
+                  portrait.serial != 0, portrait != landscape, !taken.contains(portrait) else { continue }
+            taken.insert(portrait)
+            keptPortraits[landscapeKey] = value
+        }
+        result.portraits = keptPortraits
         return result
     }
 }

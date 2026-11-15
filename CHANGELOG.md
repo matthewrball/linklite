@@ -2,6 +2,18 @@
 
 All notable changes to LinkLite are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.18] - 2026-11-15
+
+### Fixed (beta, not run on a dock)
+
+- Rotating monitors while two are attached is more reliable. A portrait display now has its own identity in macOS instead of reusing the landscape one, so macOS cannot apply the landscape display's saved mode, arrangement or mirroring to it, and a landscape↔portrait switch no longer re-creates the identity of a display macOS is still removing. Identical twin monitors get four distinct identities. Default-mode records written while the two shapes shared an identity are cleared once at launch, so each shape gets its default mode again. After upgrading, a portrait monitor is new to macOS once, so its arrangement and mode start fresh and windows on it may move.
+- A screen capture start or stop that never returns no longer holds its monitor, or a rotation, for good. After 15 s a start is given up and retried, and the card says so. A stop is shown as unconfirmed and retried.
+
+### Changed
+
+- Rotated monitors send only the parts of the screen that changed, as unrotated monitors do, instead of every frame whole. Only those parts are rotated, and the rotation itself is about 5–9 times faster (a whole 4K frame turned 90°: 8.7 ms → 0.9–1.8 ms; a 1920×1080 video area: 8.7 ms → about 0.1 ms, measured offline on an M5 Pro). Frame rate on a dock has not been measured.
+- After a captured frame cannot be used, the next frame is sent whole, so no changed area is left out of date. This applies to unrotated monitors too.
+
 ## [0.3.17] - 2026-11-13
 
 ### Security
@@ -178,7 +190,9 @@ First tester build, released as **DisplayLink Lite**.
 - A still screen stays clean, with no stale boxes or flickering patches: changed areas get a follow-up pass once the screen settles, and frames cycle through all three of the dock's buffers.
 - Heavy motion (for example App Exposé on two 4K monitors) does not reset the dock: video across both monitors is held to 100 MB/s.
 
-[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.15...HEAD
+[Unreleased]: https://github.com/matthewrball/linklite/compare/v0.3.18...HEAD
+[0.3.18]: https://github.com/matthewrball/linklite/compare/v0.3.17...v0.3.18
+[0.3.17]: https://github.com/matthewrball/linklite/compare/v0.3.15...v0.3.17
 [0.3.15]: https://github.com/matthewrball/linklite/compare/v0.3.14...v0.3.15
 [0.3.14]: https://github.com/matthewrball/linklite/compare/v0.3.13...v0.3.14
 [0.3.13]: https://github.com/matthewrball/linklite/compare/v0.3.12...v0.3.13

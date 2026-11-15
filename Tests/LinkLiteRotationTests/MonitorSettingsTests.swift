@@ -71,6 +71,24 @@ private func relaunched(_ preferences: OrientationPreferences) throws -> Orienta
     #expect(key.configuredModesKey(.turnedCounterclockwise) == "22f0-3a4b-12345678-portrait")
 }
 
+@Test func modeRecordsFromWhenPortraitSharedTheLandscapeIdentityAreDroppedWithTheirLandscapeRecord() {
+    // 0.3.17 wrote "X-portrait" for a portrait display made with the landscape identity X. Setting that portrait
+    // mode replaced macOS's saved mode for X, so X's landscape record no longer describes macOS's state: both go.
+    let entries = ["22f0-3a4b-12345678", "22f0-3a4b-12345678-portrait",       // shared: dropped
+                   "22f0-3a4b-9abcdef0", "22f0-3a4b-9abcdef0-portrait",       // shared twin: dropped
+                   "22f0-3a4b-0badcafe",                                      // landscape only: kept
+                   "22f0-3a4b-00c0ffee-portrait",                             // a portrait identity's: kept
+                   "1111-2222-33334444"]
+    let migrated = MonitorKey.configuredModesWithoutSharedPortraits(entries,
+                                                                     portraitIdentities: ["22f0-3a4b-00c0ffee"])
+    #expect(migrated == ["22f0-3a4b-0badcafe", "22f0-3a4b-00c0ffee-portrait", "1111-2222-33334444"])
+    #expect(MonitorKey.configuredModesWithoutSharedPortraits(migrated, portraitIdentities: ["22f0-3a4b-00c0ffee"])
+                == migrated, "the migration runs once")
+    let untouched = ["22f0-3a4b-12345678", "1111-2222-33334444"]
+    #expect(MonitorKey.configuredModesWithoutSharedPortraits(untouched, portraitIdentities: []) == untouched,
+            "installs that never rotated keep every record")
+}
+
 // MARK: - Serial collisions
 
 @Test func monitorsWithoutASerialAreKeptApartByHead() {
