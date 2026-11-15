@@ -38,6 +38,8 @@
 
 .after-film footer.site .dom > .wordmark {
   color: var(--cream);
+  font-weight: 400;
+  letter-spacing: -.052em;
 }
 
 .after-film footer.site .dom span {
