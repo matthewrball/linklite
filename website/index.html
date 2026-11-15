@@ -41,6 +41,7 @@
 </script>
 <style>
   :root {
+    --section-space: clamp(64px, 7vw, 96px);
     --navy: #0b1028;
     --mint: #8fdcb8;
     --cream: #f3ecdb;
@@ -71,11 +72,13 @@
     position: fixed; inset: 0 0 auto; z-index: 30; display: flex; align-items: center; justify-content: space-between;
     min-height: 64px; padding: env(safe-area-inset-top) max(28px,env(safe-area-inset-right)) 0 max(28px,env(safe-area-inset-left));
     opacity: 0; pointer-events: none; transform: translate3d(0,-100%,0);
-    background: rgba(5,8,21,.82); border-bottom: 1px solid rgba(255,255,255,.06); backdrop-filter: blur(16px);
+    background: var(--navy); border-bottom: 1px solid rgba(255,255,255,.06);
     transition: transform 240ms cubic-bezier(.32,.72,0,1), opacity 180ms ease-out;
   }
   .nav.is-visible { opacity: 1; pointer-events: auto; transform: translate3d(0,0,0); }
-  .nav .brand { text-decoration: none; font-weight: 650; letter-spacing: -.03em; }
+  .nav .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 650; letter-spacing: -.03em; }
+  .nav .brand img { width: 30px; height: 30px; border-radius: 8px; }
+  .nav .brand .wordmark { color: var(--cream); }
   .nav nav { display: flex; gap: 22px; align-items: center; }
   .nav nav a { color: var(--faint); text-decoration: none; font-size: 14px; }
   .nav .dl { min-height: 34px; padding: 0 14px; font-size: 13px; }
@@ -90,8 +93,15 @@
   .film-hero-icon { width: clamp(120px,12vw,168px); height: auto; margin-bottom: 22px; filter: drop-shadow(0 26px 36px rgba(0,0,0,.44)); }
   .film-hero h1 { margin: 0; font-size: clamp(64px,7.6vw,108px); line-height: .95; letter-spacing: -.052em; font-weight: 650; }
   .film-hero p { margin: 18px auto 0; max-width: none; white-space: nowrap; color: var(--sub); font-size: clamp(18px,1.8vw,23px); line-height: 1.45; }
-  .film-hero .dl { margin-top: 28px; min-height: 50px; padding-inline: 25px; font-size: 16px; }
-  .scroll-cue { position: absolute; left: 50%; bottom: 28px; display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid rgba(100,212,166,.28); border-radius: 50%; color: var(--mint); background: radial-gradient(circle,rgba(100,212,166,.13),rgba(100,212,166,.035)); box-shadow: 0 8px 28px rgba(0,0,0,.25),0 0 30px rgba(100,212,166,.06),inset 0 1px 0 rgba(255,255,255,.07); animation: scroll-cue-drift 2.8s ease-in-out infinite; will-change: transform; }
+  .hero-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin-top: 28px; max-width: 100%; }
+  .film-hero .dl { margin-top: 0; min-height: 50px; padding-inline: 25px; font-size: 16px; }
+  .film-hero .hero-github { gap: 8px; color: var(--cream); border: 1px solid rgba(243,236,219,.22); background: rgba(243,236,219,.055); box-shadow: inset 0 1px 0 rgba(255,255,255,.08),0 8px 28px rgba(0,0,0,.16); transition: transform 140ms var(--ease),background-color 140ms ease-out,border-color 140ms ease-out; }
+  .film-hero .hero-github:hover { color: var(--cream); border-color: rgba(243,236,219,.35); background: rgba(243,236,219,.10); }
+  .hero-github svg { flex: 0 0 auto; width: 19px; height: 19px; }
+  .hero-github .github-count { padding: 2px 7px; border: 1px solid rgba(243,236,219,.10); border-radius: 999px; color: rgba(243,236,219,.72); background: rgba(243,236,219,.06); font-size: 11px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+  .scroll-cue { position: absolute; z-index: 2; left: 50%; bottom: 28px; display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid rgba(100,212,166,.28); border-radius: 50%; color: var(--mint); background: radial-gradient(circle,rgba(100,212,166,.13),rgba(100,212,166,.035)); box-shadow: 0 8px 28px rgba(0,0,0,.25),0 0 30px rgba(100,212,166,.06),inset 0 1px 0 rgba(255,255,255,.07); animation: scroll-cue-drift 2.8s ease-in-out infinite; will-change: transform; }
+  .scroll-cue { cursor: pointer; appearance: none; padding: 0; }
+  .scroll-cue:focus-visible { outline: 2px solid var(--mint); outline-offset: 4px; }
   .scroll-cue svg { width: 18px; height: 18px; }
   @keyframes scroll-cue-drift { 0%,100% { transform: translate3d(-50%,0,0); } 50% { transform: translate3d(-50%,5px,0); } }
   .film-set { position: absolute; left: 50%; top: 50%; z-index: 5; width: 1440px; height: 720px; transform: translate(-50%,-48%) scale(1); transform-origin: center; perspective: 1600px; }
@@ -154,16 +164,18 @@
   .monitor .compare-row { grid-template-columns: 62px minmax(0,1fr) 42px; gap: 5px; font-size: 7px; }
   .monitor .compare-track { height: 6px; }
   .monitor .preview-foot { margin-top: 5px; font-size: 3.7px; }
-  .film-note { position: absolute; z-index: 6; left: 50%; bottom: 44px; width: min(680px,80vw); transform: translateX(-50%); text-align: center; color: var(--faint); font-size: 11px; line-height: 1.5; opacity: 0; }
+  .film-note { position: absolute; z-index: 6; left: 50%; bottom: 44px; width: min(680px,80vw); transform: translateX(-50%); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 16px; text-align: center; color: var(--faint); font-size: 11px; line-height: 1.5; opacity: 0; }
   .film-note a { color: var(--sub); text-underline-offset: 3px; }
   .film-note a:hover { color: var(--cream); }
-  .after-film { position: relative; z-index: 6; background: var(--navy); border-top: 1px solid var(--line); }
-  .page-section { width: min(1080px,calc(100% - 48px)); margin: 0 auto; padding: 120px 0; border-bottom: 1px solid var(--line); }
-  .page-section .eyebrow { margin: 0 0 14px; color: var(--mint); font-size: 11px; font-weight: 650; letter-spacing: .18em; text-transform: uppercase; }
+  .film-note a.research-link { flex: 0 0 auto; color: #0b1028; background: linear-gradient(180deg,#fff,#f3ecdb); border: 1px solid rgba(255,255,255,.55); box-shadow: inset 0 1px 0 #fff,0 6px 22px rgba(0,0,0,.20); text-decoration: none; white-space: nowrap; }
+  .film-note a.research-link:hover { color: #0b1028; background: #fff; }
+  .after-film { position: relative; z-index: 6; padding-top: var(--section-space); background: var(--navy); border-top: 1px solid var(--line); }
+  .page-section { width: min(1080px,calc(100% - 48px)); margin: 0 auto; scroll-margin-top: 88px; }
+  .page-section + .page-section { margin-top: var(--section-space); }
   .page-section h2 { max-width: 13ch; margin: 0; font-size: clamp(38px,5.5vw,68px); line-height: 1; letter-spacing: -.045em; font-weight: 630; }
   .page-intro { max-width: 37rem; margin: 22px 0 0; color: var(--sub); font-size: 18px; line-height: 1.55; }
   #work h2 { max-width: 20ch; text-wrap: balance; }
-  .fact-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; margin-top: 56px; overflow: hidden; border: 1px solid rgba(167,158,140,.15); border-radius: 20px; background: linear-gradient(145deg,rgba(27,36,68,.65),rgba(12,18,43,.4)); box-shadow: 0 24px 60px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.055); }
+  .fact-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; margin-top: 48px; overflow: hidden; border: 1px solid rgba(167,158,140,.15); border-radius: 20px; background: linear-gradient(145deg,rgba(27,36,68,.65),rgba(12,18,43,.4)); box-shadow: 0 24px 60px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.055); }
   .fact { padding: 30px 28px 32px; }
   .fact + .fact { border-left: 1px solid rgba(167,158,140,.14); }
   .fact-icon { display: grid; place-items: center; width: 42px; height: 42px; margin-bottom: 24px; border: 1px solid rgba(100,212,166,.19); border-radius: 12px; background: rgba(100,212,166,.065); color: var(--mint); }
@@ -172,43 +184,28 @@
   .benchmark-layout { display: grid; grid-template-columns: .8fr 1.2fr; gap: 56px; align-items: center; }
   .chart { width: 100%; margin: 0; border-radius: 16px; display: block; }
   .tradeoff { margin-top: 20px; padding-left: 16px; border-left: 2px solid var(--mint); color: var(--sub); font-size: 15px; line-height: 1.55; }
-  .install-section { display: grid; grid-template-columns: 1fr auto; gap: 32px; align-items: end; border-bottom: 0; }
-  .install-section .dl { margin-bottom: 6px; }
-  .install-meta { max-width: 34rem; }
-  .hash { margin: 14px 0 0; font-family: ui-monospace,"SF Mono",Menlo,monospace; font-size: 12px; color: var(--faint); overflow-wrap: anywhere; }
-  .foot {
-    width: 100%; margin: 0; border-top: 1px solid var(--line);
-    padding: 32px max(24px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));
-    display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: center; justify-content: space-between;
-  }
-  .foot .dom { display: inline-flex; align-items: center; gap: .7rem; font-family: inherit; font-size: 22px; font-weight: 650; color: var(--cream); letter-spacing: -.035em; }
-  .foot .dom img { width: 34px; height: 34px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.22); }
-  .foot nav { display: flex; gap: 1.4rem; flex-wrap: wrap; font-size: 13.5px; }
-  .foot nav a { color: rgba(243,236,219,.60); text-decoration: none; }
-  .foot nav .footer-download { color: var(--mint); }
-  .foot nav a:hover,.foot .madeon a:hover { color: var(--cream); }
-  .foot .disclaimer { flex-basis: 100%; margin: 8px 0 0; font-size: 12px; color: rgba(243,236,219,.38); line-height: 1.5; display: flex; justify-content: space-between; gap: .35rem 2rem; align-items: baseline; }
-  .foot .disclaimer span { white-space: nowrap; }
-  .foot .disclaimer span:last-child { text-align: right; }
-  .foot .madeon,.foot .copy { margin: 1.4rem 0 0; font-size: 13px; color: rgba(243,236,219,.38); }
-  .foot .madeon a { color: rgba(243,236,219,.60); text-decoration: none; font-variant-numeric: tabular-nums; border-bottom: 1px solid rgba(243,236,219,.16); }
-  @media (max-width: 640px) {
-    .foot .disclaimer { flex-direction: column; align-items: flex-start; }
-    .foot .disclaimer span { white-space: normal; }
-    .foot .disclaimer span:last-child { text-align: left; }
-  }
+  .install-section { width: min(1080px,calc(100% - 48px)); margin: 0 auto calc(var(--section-space) / 2); padding: 32px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 24px 32px; align-items: center; border: 1px solid rgba(100,212,166,.20); border-radius: 24px; background: linear-gradient(135deg,rgba(85,181,143,.11),rgba(17,25,52,.8)); }
+  .install-heading { display: flex; align-items: center; gap: 18px; min-width: 0; }
+  .install-icon { width: 58px; height: 58px; flex: none; border-radius: 14px; box-shadow: 0 14px 28px rgba(0,0,0,.24); }
+  .install-heading h2 { max-width: none; margin: 0; font-size: clamp(32px,4.4vw,54px); line-height: 1.08; letter-spacing: -.045em; }
+  .install-meta { margin: 9px 0 0; color: var(--sub); font-size: 14px; line-height: 1.5; }
+  .install-download { justify-self: end; min-height: 52px; white-space: nowrap; }
+  .install-details { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+  .install-note { margin: 0; color: var(--sub); font-size: 13px; line-height: 1.6; }
+  .checksum { max-width: 100%; color: var(--faint); font-size: 12px; }
+  .checksum summary { cursor: pointer; color: var(--sub); }
+  .checksum summary:hover { color: var(--cream); }
+  .checksum code { display: block; margin-top: 12px; overflow-wrap: anywhere; color: var(--faint); font-size: 11px; line-height: 1.6; }
   @media (min-width: 761px) and (max-width: 1100px) {
-    .fact-grid { grid-template-columns: 1fr; gap: 0; margin-top: 48px; }
+    .fact-grid { grid-template-columns: 1fr; gap: 0; }
     .fact + .fact { border-left: 0; border-top: 1px solid rgba(167,158,140,.14); }
     .benchmark-layout { grid-template-columns: 1fr; gap: 44px; }
     .benchmark-layout .chart { max-width: 760px; }
   }
   @media (max-width: 760px) {
     .nav { padding: env(safe-area-inset-top) max(18px,env(safe-area-inset-right)) 0 max(18px,env(safe-area-inset-left)); }
-    .nav nav { gap: 0; }
-    .nav nav > a:not(.dl) { display: none; }
+    .nav nav { gap: 16px; }
     .nav .brand,.nav .dl { min-height: 44px; }
-    .nav .brand { display: inline-flex; align-items: center; }
     .nav .dl { padding-inline: 16px; font-size: 14px; }
     .film-hero { padding: 24px 20px calc(56px + env(safe-area-inset-bottom)); }
     .film-hero p { max-width: 30ch; white-space: normal; }
@@ -216,21 +213,59 @@
     .film-set { top: 44%; }
     .scroll-cue { display: none; }
     .scroll-beat { height: 50vh; height: 50svh; }
-    .film-note { bottom: calc(44px + env(safe-area-inset-bottom)); width: calc(100% - 40px); font-size: 11px; line-height: 1.55; }
+    .film-sticky { display: flex; flex-direction: column; justify-content: center; gap: 16px; min-height: 640px; padding: 88px 16px 16px; }
+    .film-heading { position: relative; top: auto; left: auto; width: 100%; margin: 0; transform: none !important; font-size: clamp(24px,3.8vh,34px); text-wrap: balance; }
+    .film-set { position: relative; inset: auto; width: 100%; max-width: 480px; height: auto; margin: 0 auto; display: grid; gap: 12px; transform: none !important; }
+    .device { position: relative; inset: auto; width: 100%; margin: 0; transform: none !important; }
+    .mac-screen,.monitor-screen { width: 100%; aspect-ratio: auto; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+    .mac-screen::before,.mac-base,.monitor-stand,.monitor-foot,.desktop-menubar,.desktop-dock,.desktop::before { display: none; }
+    .desktop,.monitor .desktop { position: static; overflow: visible; border-radius: 0; background: none; }
+    .mac .preview,.monitor .preview { position: relative; inset: auto; width: 100%; height: auto; border-radius: 14px; transform: none !important; box-shadow: 0 14px 32px rgba(0,0,0,.24),0 0 0 1px rgba(255,255,255,.11); }
+    .preview-toolbar,.monitor .preview-toolbar { height: 24px; padding-inline: 14px; font-size: 12px; }
+    .preview-title,.monitor .preview-title { padding-right: 38px; }
+    .traffic,.monitor .traffic { gap: 5px; }
+    .traffic i,.monitor .traffic i { width: 7px; height: 7px; }
+    .preview-body,.monitor .preview-body { height: auto; padding: 12px 16px 10px; }
+    .preview-stat,.monitor .preview-stat { font-size: clamp(36px,5.5vh,44px); font-variant-numeric: tabular-nums; }
+    .preview-label,.monitor .preview-label { margin: 4px 0 9px; font-size: clamp(14px,2vh,17px); }
+    .compare,.monitor .compare { width: 100%; gap: 7px; }
+    .compare-row,.monitor .compare-row { grid-template-columns: 88px minmax(0,1fr) 78px; gap: 10px; font-size: 12px; line-height: 1.35; font-variant-numeric: tabular-nums; }
+    .compare-track,.monitor .compare-track { height: 8px; }
+    .preview-foot,.monitor .preview-foot { margin: 6px 0 0; color: #696d79; font-size: 12px; line-height: 1.25; }
+    .film-note { position: relative; inset: auto; width: 100%; margin: 0; color: var(--sub); font-size: 11px; line-height: 1.55; transform: none; }
     .fact-grid,.benchmark-layout,.install-section { grid-template-columns: 1fr; }
-    .fact-grid { gap: 0; margin-top: 44px; border-radius: 16px; }
+    .fact-grid { margin-top: 36px; border-radius: 16px; }
     .fact + .fact { border-left: 0; border-top: 1px solid rgba(167,158,140,.14); }
     .fact { padding: 26px 24px 28px; }
     .fact-icon { margin-bottom: 20px; }
     .benchmark-layout { gap: 36px; }
-    .page-section { width: min(1080px,calc(100% - 40px)); padding: 82px 0; }
+    :root { --section-space: 56px; }
+    .page-section { width: min(1080px,calc(100% - 40px)); }
     .page-section h2 { max-width: 16ch; }
     .page-intro { font-size: 17px; }
-    .install-section { gap: 28px; }
+    .install-section { gap: 22px; padding: 24px; }
+    .install-heading { gap: 14px; }
+    .install-icon { width: 48px; height: 48px; }
+    .install-heading h2 { font-size: clamp(30px,8.2vw,42px); }
     .install-section .dl { justify-self: start; }
-    .foot { padding-inline: max(20px,env(safe-area-inset-left)) max(20px,env(safe-area-inset-right)); }
+    .install-details { gap: 12px; }
+
+  }
+  @media (max-width: 760px) and (max-height: 700px) {
+    .film-sticky { gap: 10px; padding: 100px 16px 24px; }
+    .film-heading { font-size: 24px; }
+    .film-set { gap: 8px; }
+    .preview-toolbar,.monitor .preview-toolbar { height: 18px; font-size: 10px; }
+    .preview-body,.monitor .preview-body { padding: 6px 12px; }
+    .preview-stat,.monitor .preview-stat { font-size: 32px; }
+    .preview-label,.monitor .preview-label { margin: 3px 0 6px; font-size: 12px; }
+    .compare,.monitor .compare { gap: 5px; }
+    .compare-row,.monitor .compare-row { font-size: 11px; }
+    .preview-foot,.monitor .preview-foot { margin-top: 4px; font-size: 10px; }
+    .film-note { font-size: 10px; }
   }
   @media (max-width: 420px) {
+    .nav .wordmark { display: none; }
     .install-section .dl { width: 100%; justify-self: stretch; }
   }
   @media (max-height: 520px) and (orientation: landscape) {
@@ -243,10 +278,9 @@
     .film-hero .dl { margin-top: 12px; }
     .scroll-beat { height: 50vh; height: 50svh; }
     .film-note { bottom: calc(24px + env(safe-area-inset-bottom)); font-size: 10px; }
-    .page-section { padding-block: 60px; }
   }
   @media (pointer: coarse) {
-    .nav .dl,.foot nav a { min-height: 44px; display: inline-flex; align-items: center; }
+    .nav .dl,.footer.site nav a,.footer.site nav button { min-height: 44px; display: inline-flex; align-items: center; }
   }
   @media (prefers-reduced-motion: reduce) {
     .nav { transition: none; }
@@ -268,11 +302,14 @@
     .film-note { position: relative; left: auto; bottom: auto; margin: -22px auto 0; opacity: 1 !important; transform: none; }
   }
 </style>
+<link rel="stylesheet" href="footer.css">
+<link rel="stylesheet" href="dialogs.css">
+<script src="donate.js" defer></script>
 </head>
 <body>
 <main class="film" data-film>
-  <header class="nav" data-site-nav inert><a class="brand mark" href="#top" aria-label="LinkLite home">Link<span>Lite</span></a><nav aria-label="Main navigation">
-    <a href="#work">How it works</a><a href="#proof">Benchmark</a><a href="#install">Install</a><a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download</a>
+  <header class="nav" data-site-nav inert><a class="brand mark" href="#top" aria-label="LinkLite home"><img src="assets/logo.png" alt="" width="30" height="30" decoding="async"><span class="wordmark">Link<span>Lite</span></span></a><nav aria-label="Main navigation">
+    <a href="/benchmarks/">Benchmarks</a><a href="https://matthewball.me/blog/" target="_blank" rel="noopener">Blog</a><a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download</a>
   </nav></header>
   <section class="film-experience" data-experience id="top" aria-label="LinkLite product story">
     <div class="film-sticky">
@@ -281,9 +318,15 @@
           <img class="film-hero-icon" src="assets/logo.png" width="512" height="512" alt="LinkLite app icon: navy and mint display frames on a cream tile.">
           <h1 class="mark">Link<span>Lite</span></h1>
           <p>The lightweight driver for DisplayLink docks on macOS.</p>
-          <a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download for macOS</a>
+          <div class="hero-actions">
+            <a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download for macOS</a>
+            <a class="dl hero-github" href="https://github.com/matthewrball/linklite" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.5.5 0 6 0 12.5c0 5.3 3.4 9.8 8.2 11.4.6.1.8-.3.8-.6v-2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2 1-.3 2-.4 3-.4s2 .1 3 .4C17 4.8 18 5.1 18 5.1c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.8-1.6 8.2-6.1 8.2-11.4C24 6 18.5.5 12 .5Z"/></svg>
+              GitHub <span class="github-count" data-github-stars aria-label="5 stars">★ 5</span>
+            </a>
+          </div>
         </div>
-        <span class="scroll-cue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15m-6-6 6 6 6-6"/></svg></span>
+        <button type="button" class="scroll-cue" data-scroll-cue aria-label="Scroll to the display comparison"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v15m-6-6 6 6 6-6"/></svg></button>
       </div>
       <h2 class="film-heading" data-film-heading>Compared to DisplayLink:</h2>
       <div class="film-set" data-film-set aria-label="A MacBook and two external displays showing LinkLite benchmark comparisons">
@@ -301,18 +344,18 @@
         </div><div class="mac-base"></div></div>
         <div class="device monitor right" data-right><div class="monitor-screen">
           <div class="desktop"><div class="desktop-menubar" aria-hidden="true"><span>● &nbsp;LinkLite&nbsp;&nbsp; File&nbsp;&nbsp; Edit&nbsp;&nbsp; View&nbsp;&nbsp; Window</span><span>⌁ &nbsp; 17:41</span></div>
-            <div class="preview" data-preview="size"><div class="preview-toolbar"><span class="traffic" aria-hidden="true"><i></i><i></i><i></i></span><span class="preview-title">app-size.png</span></div><div class="preview-body"><p class="preview-stat">5.3×</p><p class="preview-label">smaller app</p><div class="compare" aria-label="LinkLite 3.9 megabytes; DisplayLink Manager 20.6 megabytes"><div class="compare-row lite"><span>LinkLite</span><span class="compare-track"><span class="compare-fill" style="--value:19%"></span></span><b>3.9 MB</b></div><div class="compare-row"><span>DisplayLink</span><span class="compare-track"><span class="compare-fill" style="--value:100%"></span></span><b>20.6 MB</b></div></div><p class="preview-foot">LinkLite 0.3.0+ · current app size</p></div></div>
+            <div class="preview" data-preview="size"><div class="preview-toolbar"><span class="traffic" aria-hidden="true"><i></i><i></i><i></i></span><span class="preview-title">app-size.png</span></div><div class="preview-body"><p class="preview-stat">5.3×</p><p class="preview-label">smaller app</p><div class="compare" aria-label="LinkLite 3.9 megabytes; DisplayLink Manager 20.6 megabytes"><div class="compare-row lite"><span>LinkLite</span><span class="compare-track"><span class="compare-fill" style="--value:19%"></span></span><b>3.9 MB</b></div><div class="compare-row"><span>DisplayLink</span><span class="compare-track"><span class="compare-fill" style="--value:100%"></span></span><b>20.6 MB</b></div></div><p class="preview-foot">LinkLite 0.3.0 app bundle</p></div></div>
             <div class="desktop-dock" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
           </div>
         </div><div class="monitor-stand"></div><div class="monitor-foot"></div></div>
       </div>
-      <p class="film-note" data-film-note inert>Benchmarked on two 4K displays, 3 November 2026. <a href="https://github.com/matthewrball/linklite/blob/main/docs/BENCHMARK.md" rel="noopener" target="_blank">Results and methodology ↗</a></p>
+      <p class="film-note" data-film-note inert><a class="dl research-link" href="/benchmarks/">Read the benchmark</a></p>
     </div>
     <div class="scroll-beat" aria-hidden="true"></div><div class="scroll-beat" aria-hidden="true"></div><div class="scroll-beat" aria-hidden="true"></div><div class="scroll-beat" aria-hidden="true"></div>
   </section>
   <div class="after-film">
     <section class="page-section" id="work">
-      <p class="eyebrow">How it works</p><h2>Three displays. <br>Nothing extra running.</h2>
+      <h2>Use your external displays<br>without the performance headache.</h2>
       <p class="page-intro">LinkLite creates one virtual display per dock monitor, reads changed areas with ScreenCaptureKit, and sends the pixels straight to the dock. No backend. No login-window agent.</p>
       <div class="fact-grid">
         <div class="fact"><span class="fact-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="15" height="11" rx="2"/><path d="M8 20h8m-4-4v4"/><rect x="10" y="8" width="12" height="10" rx="2" fill="#111831"/></svg></span><b>One display per monitor</b><p>Native 4K60 on the tested dock. Changed 64×16 tiles are sent again; settled areas are not re-encoded every frame.</p></div>
@@ -321,27 +364,176 @@
       </div>
     </section>
     <section class="page-section benchmark-layout" id="proof">
-      <div><p class="eyebrow">An honest benchmark</p><h2>Less memory. <br>More CPU.</h2><p class="page-intro">134 MB versus 513 MB on two 4K monitors. Under motion, the whole GPU was 15% busy versus 33%.</p><p class="tradeoff">DisplayLink Manager encodes on the GPU. LinkLite encodes on the CPU and used about 3.4 cores under full-window motion, against 20% for Manager.</p></div>
+      <div><h2>Less memory. <br>More CPU.</h2><p class="page-intro">134 MB versus 513 MB on two 4K monitors. Under motion, the whole GPU was 15% busy versus 33%.</p><p class="tradeoff">DisplayLink Manager encodes on the GPU. LinkLite encodes on the CPU and used about 3.4 cores under full-window motion, against 20% for Manager.</p></div>
       <img class="chart" src="assets/benchmark.png" alt="Historical benchmark chart: LinkLite used 74% less memory and 54% lower whole-GPU use under motion, with a CPU trade-off.">
     </section>
-    <section class="page-section install-section" id="install">
-      <div><p class="eyebrow">Install the notarized beta</p><h2>Give your setup <br>a smaller driver.</h2><p class="page-intro install-meta">Apple silicon · macOS 14 or later · 0.3.17 beta <br>Quit DisplayLink Manager before opening LinkLite.</p><p class="hash">SHA-256 · ac13da97917aaf344c6cbc36414e3f77cb4e6c71d45b22374b0e21a9d7974548</p></div>
-      <a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download 0.3.17</a>
+    <section class="page-section install-section" id="install" aria-labelledby="install-title">
+      <div class="install-heading">
+        <img class="install-icon" src="assets/logo.png" width="256" height="256" alt="" aria-hidden="true">
+        <div><h2 id="install-title">Download LinkLite</h2><p class="install-meta">macOS 14 or later · Apple silicon · v0.3.17 beta</p></div>
+      </div>
+      <a class="dl install-download" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download for macOS</a>
+      <div class="install-details"><p class="install-note">Quit DisplayLink Manager before opening LinkLite.</p><details class="checksum"><summary>SHA-256 checksum</summary><code>ac13da97917aaf344c6cbc36414e3f77cb4e6c71d45b22374b0e21a9d7974548</code></details></div>
     </section>
-    <footer class="foot">
-      <span class="dom"><img src="assets/logo.png" width="256" height="256" loading="lazy" decoding="async" alt="" aria-hidden="true">LinkLite</span>
-      <nav aria-label="Footer">
-        <a href="https://github.com/matthewrball/linklite" rel="noopener" target="_blank">GitHub</a>
-        <a href="#work">How it works</a>
-        <a href="https://github.com/matthewrball/linklite/blob/main/PRIVACY.md" rel="noopener" target="_blank">Privacy</a>
-        <a class="footer-download" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download</a>
-      </nav>
-      <p class="disclaimer"><span>Free &amp; open source under GPL-2.0-or-later.</span><span>Not affiliated with Synaptics or DisplayLink.</span></p>
-      <p class="madeon">Created on <a href="https://mempool.space/block/0000000000000000000027e3f86084fe3be979d9004bd9697c20280e94d82645" rel="noopener" target="_blank">975870</a> by <a href="https://matthewball.me/" rel="noopener" target="_blank">Matthew Ball</a></p>
-      <p class="copy">LinkLite © 2026</p>
-    </footer>
+    <section class="biblio" aria-label="Site information">
+      <div class="wrap">
+        <footer class="site">
+          <span class="dom"><img src="assets/logo.png" width="34" height="34" loading="lazy" decoding="async" alt=""><span class="wordmark">Link<span>Lite</span></span></span>
+          <nav aria-label="Footer">
+            <a href="https://github.com/matthewrball/linklite" rel="noopener" target="_blank">GitHub</a>
+            <a href="#work">How it works</a>
+            <a href="https://github.com/matthewrball/linklite/blob/main/PRIVACY.md" rel="noopener" target="_blank">Privacy</a>
+            <a class="footer-download" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download</a>
+            <button type="button" class="footer-donate" data-open-donate>Donate</button>
+          </nav>
+          <p class="disclaimer"><span>Free &amp; open source under GPL-2.0-or-later.</span><span>Not affiliated with Synaptics or DisplayLink.</span></p>
+          <p class="madeon">Created on <a href="https://mempool.space/block/0000000000000000000027e3f86084fe3be979d9004bd9697c20280e94d82645" rel="noopener" target="_blank">975870</a> by <a href="https://matthewball.me/" rel="noopener" target="_blank">Matthew Ball</a></p>
+          <p class="copy">LinkLite © 2026</p>
+        </footer>
+      </div>
+    </section>
   </div>
 </main>
+
+<svg class="linklite-icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <symbol id="linklite-icon-cashapp" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="8" fill="#00d632"/>
+      <path d="M22.8 10.3c-1.5-1.2-3.8-2-6.1-2-3.8 0-6.5 2-6.5 5 0 2.7 2 4.2 5.6 5.2l2.1.6c1.5.4 2.1.9 2.1 1.8 0 1.1-1.1 1.8-2.8 1.8-2 0-3.5-.8-4.9-2.2l-2 2.1c1.7 1.8 4.1 2.8 6.8 2.9v2h3v-2c3.5-.3 5.8-2.2 5.8-5.2 0-2.7-1.7-4.2-5.1-5.2l-2.4-.7c-1.5-.4-2.1-.9-2.1-1.8 0-1 .9-1.7 2.5-1.7 1.7 0 3 .6 4.2 1.6l1.8-2.2ZM14 6h3v2.3h-3V6Z" fill="#07150c"/>
+    </symbol>
+    <symbol id="linklite-icon-strike" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="8" fill="#f3ecdb"/>
+      <path d="m18.8 4-10 14.1h6.6L13.1 28l10-15.2h-6.7L18.8 4Z" fill="#11182c"/>
+    </symbol>
+    <symbol id="linklite-icon-bluewallet" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="8" fill="#2879e8"/>
+      <path d="M9 9.5A3.5 3.5 0 0 1 12.5 6H22a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H12a3 3 0 0 1-3-3V9.5Zm4-.5v12h8.5a2.5 2.5 0 0 0 0-5H13v-7Z" fill="#f3ecdb"/>
+      <circle cx="20.5" cy="18.5" r="1.4" fill="#2879e8"/>
+    </symbol>
+  </defs>
+</svg>
+
+<dialog class="linklite-donate" id="linklite-donate-dialog" aria-labelledby="linklite-donate-title">
+  <div class="linklite-donate-sheet" data-linklite-donate-sheet>
+    <div class="linklite-donate-base" data-linklite-donate-base>
+      <div class="linklite-donate-head">
+        <h2 class="linklite-donate-title" id="linklite-donate-title">Donate</h2>
+        <button class="linklite-donate-close" type="button" data-linklite-close-donate aria-label="Close donate drawer">&times;</button>
+      </div>
+      <p class="linklite-donate-copy">Help keep LinkLite free, open source, and lightweight.</p>
+      <div class="linklite-donate-options">
+        <a class="linklite-donate-option" href="https://cash.app/$mattsats" rel="noopener" target="_blank">
+          <span class="linklite-donate-mark linklite-donate-cash" aria-hidden="true">$</span>
+          <span>
+            <b>Donate in Cash</b>
+            <em>Cash App: $mattsats</em>
+          </span>
+        </a>
+        <button class="linklite-donate-option" type="button" data-linklite-open-bitcoin>
+          <span class="linklite-donate-mark linklite-donate-bitcoin" aria-hidden="true">&#8383;</span>
+          <span>
+            <b>Donate in Bitcoin</b>
+            <em>Lightning Address: matthewrball@strike.me</em>
+          </span>
+        </button>
+      </div>
+      <p class="linklite-donate-note">Helps me work on LinkLite while offsetting Apple Developer program and token costs.</p>
+    </div>
+
+    <button class="linklite-bitcoin-scrim" type="button" tabindex="-1" data-linklite-close-bitcoin aria-label="Back to donation options"></button>
+
+    <section class="linklite-bitcoin-panel" id="linklite-bitcoin-panel" role="dialog" aria-modal="true" aria-labelledby="linklite-bitcoin-title" aria-hidden="true" inert>
+      <div class="linklite-bitcoin-base" data-linklite-bitcoin-base>
+        <div class="linklite-bitcoin-head">
+          <div>
+            <p class="linklite-bitcoin-eyebrow">Lightning</p>
+            <h3 class="linklite-bitcoin-title" id="linklite-bitcoin-title">Donate in Bitcoin</h3>
+          </div>
+          <button class="linklite-bitcoin-close" type="button" data-linklite-close-bitcoin aria-label="Close Bitcoin options">&times;</button>
+        </div>
+        <div class="linklite-bitcoin-address">
+          <b>Lightning Address</b>
+          <div class="linklite-bitcoin-address-row">
+            <code data-linklite-lightning-address>matthewrball@strike.me</code>
+            <button class="linklite-bitcoin-copy" type="button" data-linklite-copy-lightning aria-label="Copy Lightning address">Copy</button>
+          </div>
+        </div>
+        <p class="linklite-sr-only" data-linklite-copy-feedback role="status" aria-live="polite" aria-atomic="true"></p>
+        <div class="linklite-bitcoin-actions">
+          <a class="linklite-bitcoin-action" href="https://strike.me/matthewrball" rel="noopener" target="_blank" data-linklite-copy-before-open>
+            <i aria-hidden="true"><svg class="linklite-payment-icon" viewBox="0 0 32 32"><use href="#linklite-icon-strike"/></svg></i>
+            <span><b>Open in Strike</b><em>Copies the address first</em></span>
+          </a>
+          <a class="linklite-bitcoin-action" href="bluewallet:lightning:matthewrball%40strike.me" data-linklite-copy-before-open>
+            <i aria-hidden="true"><svg class="linklite-payment-icon" viewBox="0 0 32 32"><use href="#linklite-icon-bluewallet"/></svg></i>
+            <span><b>Open in BlueWallet</b><em>Uses BlueWallet&rsquo;s Lightning link</em></span>
+          </a>
+          <button class="linklite-bitcoin-action" type="button" data-linklite-open-cashapp>
+            <i aria-hidden="true"><svg class="linklite-payment-icon" viewBox="0 0 32 32"><use href="#linklite-icon-cashapp"/></svg></i>
+            <span><b>Open in Cash App</b><em>Choose sats in the next drawer</em></span>
+          </button>
+        </div>
+      </div>
+
+      <section class="linklite-cashapp-panel" id="linklite-cashapp-panel" role="dialog" aria-modal="true" aria-labelledby="linklite-cashapp-title" aria-describedby="linklite-cashapp-status" aria-hidden="true" aria-busy="false" inert data-linklite-cashapp-pay>
+        <div class="linklite-cashapp-top">
+          <div class="linklite-cashapp-pay-head">
+            <i aria-hidden="true"><svg class="linklite-payment-icon" viewBox="0 0 32 32"><use href="#linklite-icon-cashapp"/></svg></i>
+            <div>
+              <h4 id="linklite-cashapp-title">Open in Cash App</h4>
+              <p id="linklite-cashapp-status" data-linklite-cashapp-status role="status" aria-live="polite" aria-atomic="true">Choose sats to create a Lightning invoice</p>
+            </div>
+          </div>
+          <button class="linklite-cashapp-back" type="button" data-linklite-close-cashapp aria-label="Back to Bitcoin options">Back</button>
+        </div>
+        <div class="linklite-cashapp-amounts">
+          <button class="linklite-cashapp-chip" type="button" data-linklite-cashapp-sats="21000" aria-pressed="false">21k sats</button>
+          <button class="linklite-cashapp-chip" type="button" data-linklite-cashapp-sats="100000" aria-pressed="false">100k sats</button>
+          <button class="linklite-cashapp-chip" type="button" data-linklite-cashapp-sats="500000" aria-pressed="false">500k sats</button>
+          <form class="linklite-cashapp-custom" data-linklite-cashapp-custom>
+            <label class="linklite-sr-only" for="linklite-cashapp-custom-sats">Custom sats amount</label>
+            <input id="linklite-cashapp-custom-sats" name="sats" data-linklite-cashapp-custom-sats type="number" inputmode="numeric" min="1" step="1" autocomplete="off" placeholder="Custom sats">
+            <button type="submit">Go</button>
+          </form>
+        </div>
+      </section>
+    </section>
+  </div>
+</dialog>
+
+<aside class="linklite-signup" id="linklite-signup-banner" data-linklite-signup-banner="home" aria-labelledby="linklite-signup-title" hidden>
+  <button class="linklite-signup-close" type="button" data-linklite-signup-dismiss aria-label="Dismiss software signup">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+  </button>
+  <div class="linklite-signup-heading">
+    <span class="linklite-signup-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16v12H4V6Zm0 1 8 6 8-6" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+    </span>
+    <div>
+      <h2 id="linklite-signup-title">Want more free software?</h2>
+      <p>No spam. Just beautiful products.</p>
+    </div>
+  </div>
+  <form class="linklite-signup-form" data-linklite-signup-form>
+    <label class="linklite-signup-honeypot">Website <input name="website" tabindex="-1" autocomplete="off"></label>
+    <input name="source" type="hidden" value="homepage">
+    <label class="linklite-sr-only" for="linklite-signup-email">Email address</label>
+    <input id="linklite-signup-email" name="email" type="email" autocomplete="email" inputmode="email" aria-describedby="linklite-signup-status" placeholder="you@example.com" required>
+    <div class="linklite-signup-challenge" data-linklite-signup-challenge></div>
+    <button class="linklite-signup-submit" type="submit" data-linklite-signup-submit>Keep me posted</button>
+  </form>
+  <p class="linklite-signup-status" id="linklite-signup-status" data-linklite-signup-status role="status" aria-live="polite" aria-atomic="true"></p>
+</aside>
+
+<noscript>
+  <section class="linklite-nojs-donate" aria-labelledby="linklite-nojs-donate-title">
+    <h2 id="linklite-nojs-donate-title">Support LinkLite</h2>
+    <p>Donate directly with <a href="https://cash.app/$mattsats" rel="noopener" target="_blank">Cash App ($mattsats)</a> or <a href="https://strike.me/matthewrball" rel="noopener" target="_blank">Strike</a>.</p>
+    <p>Lightning Address: <code>matthewrball@strike.me</code></p>
+    <p><a href="bluewallet:lightning:matthewrball%40strike.me">Open this Lightning address in BlueWallet</a>. JavaScript is needed only to create a Cash App Lightning invoice.</p>
+  </section>
+</noscript>
+
 <script>
 (() => {
   const film = document.querySelector("[data-film]");
@@ -399,8 +591,11 @@
     heroContent.style.transform = `translate3d(0,${-30*heroOut}px,0) scale(${1-.035*heroOut})`;
     hero.style.visibility = heroOut >= 1 ? "hidden" : "visible";
     set.style.transform = `translate(-50%,-48%) scale(${fit})`;
-    mac.style.opacity = String(ramp(p,.06,.14));
-    mac.style.transform = `translate3d(0,${220*(1-macIn)}px,0)`;
+    const setBounds = set.getBoundingClientRect();
+    const macRestTop = setBounds.top + mac.offsetTop*fit;
+    const enterDistance = (viewport-macRestTop+64)/fit;
+    mac.style.opacity = String(ramp(p,.025,.065));
+    mac.style.transform = `translate3d(0,${enterDistance*(1-macIn)}px,0)`;
     macBase.style.opacity = String(ramp(p,.11,.22));
     left.style.opacity = String(leftIn);
     left.style.transform = `translate3d(${-620*(1-leftIn)}px,${34*(1-leftIn)}px,0) rotate(${-4*(1-leftIn)}deg)`;
@@ -411,12 +606,13 @@
     const headingIn = arrive(ramp(p,.15,.26));
     heading.style.opacity = String(headingIn);
     heading.style.transform = `translate3d(-50%,${12*(1-headingIn)}px,0)`;
-    previewIn(previews.find(el => el.dataset.preview === "memory"),arrive(ramp(p,.18,.3)));
+    const memoryIn = arrive(ramp(p,.065,.235));
+    previewIn(previews.find(el => el.dataset.preview === "memory"),memoryIn);
     previewIn(previews.find(el => el.dataset.preview === "gpu"),arrive(ramp(p,.42,.57)));
     previewIn(previews.find(el => el.dataset.preview === "size"),arrive(ramp(p,.66,.82)));
-    const noteIn = ramp(p,.82,.94);
-    note.style.opacity = String(noteIn);
-    note.inert = noteIn === 0;
+    // The research CTA is ordinary note content, revealed with the completed memory stat.
+    note.style.opacity = memoryIn === 1 ? "1" : "0";
+    note.inert = memoryIn < 1;
     const navVisible = scrollY > start+viewport*.58;
     nav.classList.toggle("is-visible",navVisible);
     nav.inert = !navVisible;
@@ -425,7 +621,25 @@
   addEventListener("scroll",schedule,{passive:true});
   addEventListener("resize",schedule,{passive:true});
   reduced.addEventListener("change",schedule);
+  film.querySelector("[data-scroll-cue]").addEventListener("click", () => {
+    const distance = Math.max(1,experience.offsetHeight-innerHeight);
+    scrollTo({top: experience.offsetTop+distance*.3,behavior: reduced.matches ? "auto" : "smooth"});
+  });
   render();
+})();
+</script>
+<script>
+(() => {
+  const starChips = document.querySelectorAll("[data-github-stars]");
+  if (!starChips.length || !window.fetch) return;
+  fetch("/api/stars").then(r => r.ok ? r.json() : null).then(data => {
+    if (!Number.isSafeInteger(data?.stars) || data.stars < 0) return;
+    const label = new Intl.NumberFormat("en",{notation:"compact"}).format(data.stars);
+    starChips.forEach(chip => {
+      chip.textContent = `★ ${label}`;
+      chip.setAttribute("aria-label",`${data.stars} stars`);
+    });
+  }).catch(() => {});
 })();
 </script>
 </body>

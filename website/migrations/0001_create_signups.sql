@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS signups (
+  email TEXT PRIMARY KEY COLLATE NOCASE,
+  source TEXT NOT NULL DEFAULT 'download',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS signup_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ip_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS signup_attempts_created_at ON signup_attempts (created_at);
