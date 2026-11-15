@@ -45,7 +45,7 @@ import Testing
 
     c.recorder.holdModes = true
     await c.eventually("the mode retry is due") { c.backend.sleeps.pending.contains(.seconds(1)) }
-    c.backend.sleeps.release { $0 == .seconds(1) }
+    await c.releaseSleep(.seconds(1))
     await c.eventually("the retry is held inside its call") { c.recorder.heldModeCount == 1 }
 
     stream.scriptStops([.stall])
@@ -178,7 +178,7 @@ import Testing
     #expect(!c.runtime.controller.permissionDenied, "the stale denial describes permission already restored")
     #expect(c.status(0)?.problem == nil)
 
-    c.backend.sleeps.release { $0 == .seconds(1) }
+    await c.releaseSleep(.seconds(1))
     await c.eventually("the head is running") { c.status(0)?.captureRunning == true }
     #expect(c.backend.startRequests == [0, 0])
 }
@@ -199,7 +199,7 @@ import Testing
     c.runtime.send(.captureStopped(running, .failed("the stream stopped")))
     await c.eventually("the stop is in flight") { c.backend.stops.pending.contains(first.id) }
     await c.eventually("the retry is due") { c.backend.sleeps.pending.contains(.seconds(1)) }
-    c.backend.sleeps.release { $0 == .seconds(1) }
+    await c.releaseSleep(.seconds(1))
     await c.settle()
     #expect(c.backend.startRequests == [0], "no second stream while the first stop is unconfirmed")
     #expect(!first.isConfirmedStopped)

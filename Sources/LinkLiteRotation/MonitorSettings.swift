@@ -60,7 +60,8 @@ public struct MonitorKey: Hashable, Sendable {
     }
 
     /// Entry for DisplayHost's "ConfiguredMonitors" list (default mode applied once). Unchanged for
-    /// landscape shapes. A portrait virtual display has a different mode list, so it gets its own entry.
+    /// landscape shapes. A portrait display has its own identity (see DisplayIdentityAllocator) and its entry
+    /// carries a suffix as well, so it can be told apart from a landscape one.
     public func configuredModesKey(_ orientation: DisplayOrientation) -> String {
         Self.configuredModesKey(identity: DisplayIdentity(vendorID: vendorID, productCode: productCode, serial: serial),
                                 orientation: orientation)
@@ -79,6 +80,27 @@ public struct MonitorKey: Hashable, Sendable {
     /// already recorded in `ConfiguredMonitors`.
     public func needsDefaultMode(_ orientation: DisplayOrientation, configured: [String]) -> Bool {
         !configured.contains(configuredModesKey(orientation))
+    }
+
+    /// Drops the "ConfiguredMonitors" entries written while a portrait display shared its landscape identity
+    /// (before 0.3.18). Setting the portrait default mode (permanently) replaced the mode macOS had saved for
+    /// that identity, yet the landscape entry stayed, so the landscape display was never given its default mode
+    /// again: macOS's saved mode for it could be a portrait one that its mode list does not have. An entry
+    /// `X-portrait` whose `X` is not one of `portraitIdentities` (the identities portrait displays are now made
+    /// with) is such an entry: it and `X` are removed, so each is set once more when next used. Everything else
+    /// is kept in order.
+    public static func configuredModesWithoutSharedPortraits(_ entries: [String],
+                                                            portraitIdentities: Set<String>) -> [String] {
+        let shared = Set(entries.compactMap { entry -> String? in
+            guard entry.hasSuffix(portraitRecordSuffix) else { return nil }
+            let identity = String(entry.dropLast(portraitRecordSuffix.count))
+            return portraitIdentities.contains(identity) ? nil : identity
+        })
+        guard !shared.isEmpty else { return entries }
+        return entries.filter { entry in
+            let identity = entry.hasSuffix(portraitRecordSuffix) ? String(entry.dropLast(portraitRecordSuffix.count)) : entry
+            return !shared.contains(identity)
+        }
     }
 }
 

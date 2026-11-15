@@ -63,6 +63,13 @@ public struct AttachedMonitor: Sendable {
 /// A derived identity avoids every identity in use or reserved, every reported identity ever seen,
 /// and the configured monitor keys the caller passes, so it never names another monitor's settings.
 ///
+/// A portrait display gets its own identity: the portrait identity paired with the landscape identity
+/// the rules above choose. It is derived once, stored and reserved like a derived serial, so a portrait
+/// display keeps its macOS settings across launches, and twins' portrait identities differ as their
+/// landscape ones do. macOS keys saved modes, arrangement and mirroring by identity, so a portrait
+/// display never inherits a landscape display's state, nor the reverse. A rotation between landscape
+/// and portrait therefore never re-creates the identity of the display it has just removed.
+///
 /// A claim is refused (nil) while the chosen identity is still held by any live lease, including a
 /// display retained for a reconnect on another socket: a moved monitor waits for its own identity
 /// rather than taking a new one. The caller retries when `identityReleasedNotification` is posted.
@@ -113,15 +120,17 @@ public final class DisplayIdentityAllocator: @unchecked Sendable {
 
     /// Claims an identity for the monitor on `head`. `attached` are the monitors attached on the
     /// other sockets right now; the caller excludes `head` itself. `configured` are the identities
-    /// that already have per-display settings in macOS; a derived identity avoids them.
+    /// that already have per-display settings in macOS; a derived identity avoids them. `portrait`
+    /// claims the portrait identity paired with the landscape identity the monitor would get.
     ///
     /// What is recorded differs by outcome. Twin recognition and a socket's derived serial describe
     /// the monitors on the bus, so they are kept even when the claim is refused: the refused socket
     /// then waits for the same serial it will get. Ownership is a claim, so it is recorded only once
     /// the identity is actually held. A refused attempt must never move an owner, or a later restart
-    /// would hand the identities out in a different order.
+    /// would hand the identities out in a different order. A held portrait identity records the
+    /// ownership of the landscape identity it is paired with: the socket holds that pair.
     public func claim(reported: DisplayIdentity, head: UInt8, attached: [AttachedMonitor],
-                      configured: Set<DisplayIdentity> = []) -> IdentityClaim? {
+                      configured: Set<DisplayIdentity> = [], portrait: Bool = false) -> IdentityClaim? {
         let key = reported.configurationKey
         let others = attached.filter { $0.head != head }
         let (claim, saved) = lock.withLock { () -> (IdentityClaim?, DisplayIdentityRecords?) in
@@ -135,13 +144,16 @@ public final class DisplayIdentityAllocator: @unchecked Sendable {
             let generatedElsewhere = others.contains { $0.identity == reported }
             // A reservation is never this socket's own reported identity (see assignedIdentity), so any
             // reservation equal to `reported` belongs to a different monitor.
-            let reservedElsewhere = state.assignments.values.contains(key)
+            let reservedElsewhere = state.assignments.values.contains(key) || state.portraits.values.contains(key)
             let wantsReported = !generatedElsewhere && !reservedElsewhere
                 && !(state.twins.contains(key) && ownedElsewhere)
 
-            let identity = wantsReported
+            let landscape = wantsReported
                 ? reported
                 : assignedIdentity(for: reported, head: head, attached: others, configured: configured)
+            let identity = portrait
+                ? portraitIdentity(for: landscape, head: head, attached: others, configured: configured)
+                : landscape
             guard !live.values.contains(where: { $0.identity == identity }) else {
                 // Refused: only the observations and the reserved serial above may have changed.
                 return (nil, state != before ? state : nil)
@@ -178,6 +190,7 @@ public final class DisplayIdentityAllocator: @unchecked Sendable {
                 avoid.insert(reserved)
             }
         }
+        avoid.formUnion(state.portraits.values.compactMap(DisplayIdentity.init(configurationKey:)))
         // Every reported identity seen before, and every owner and twin, is a physical monitor's.
         for key in state.reported.union(state.owners.keys).union(state.twins) {
             if let known = DisplayIdentity(configurationKey: key) {
@@ -186,6 +199,33 @@ public final class DisplayIdentityAllocator: @unchecked Sendable {
         }
         let identity = DisplayIdentity.derived(from: reported, head: head, avoiding: avoid)
         state.assignments[slot] = identity.configurationKey
+        return identity
+    }
+
+    /// The portrait identity paired with `landscape`: the stored one if there is one, otherwise a new one
+    /// that avoids every identity in use, reserved or known, and every landscape identity. Called under the lock.
+    private func portraitIdentity(for landscape: DisplayIdentity, head: UInt8,
+                                  attached: [AttachedMonitor], configured: Set<DisplayIdentity>) -> DisplayIdentity {
+        let slot = landscape.configurationKey
+        if let stored = state.portraits[slot].flatMap(DisplayIdentity.init(configurationKey:)),
+           stored.vendorID == landscape.vendorID, stored.productCode == landscape.productCode,
+           stored != landscape, stored.serial != 0 {
+            return stored
+        }
+        var avoid = Set(live.values.map(\.identity))
+        avoid.insert(landscape)
+        avoid.formUnion(attached.map(\.reported))
+        avoid.formUnion(attached.compactMap(\.identity))
+        avoid.formUnion(configured)
+        let known = Array(state.assignments.values) + Array(state.portraits.keys) + Array(state.portraits.values)
+            + Array(state.reported.union(state.owners.keys).union(state.twins))
+        for key in known {
+            if let known = DisplayIdentity(configurationKey: key) {
+                avoid.insert(known)
+            }
+        }
+        let identity = DisplayIdentity.derived(from: landscape, head: head, avoiding: avoid)
+        state.portraits[slot] = identity.configurationKey
         return identity
     }
 

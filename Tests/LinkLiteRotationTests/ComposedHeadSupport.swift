@@ -272,8 +272,9 @@ final class FakeRecorder {
         if !scriptedCreations.isEmpty {
             return .failed(scriptedCreations.removeFirst())
         }
+        // As DisplayHost: a portrait display claims the portrait identity paired with the landscape one.
         guard let claim = identities.claim(reported: monitor.reportedIdentity, head: monitor.head,
-                                           attached: attached) else {
+                                           attached: attached, portrait: orientation.swapsAxes) else {
             return .identityHeld
         }
         let display = FakeDisplay(identity: claim.identity, number: displays.count + 1)
@@ -385,6 +386,14 @@ final class ComposedHeads {
             await Task.yield()
         }
         Issue.record("never reached: \(message)")
+    }
+
+    /// Releases one pending platform sleep of `duration` once it is waiting. Timers are scheduled on their own tasks,
+    /// so releasing at once could race the sleep being started. Returns whether one was released.
+    @discardableResult
+    func releaseSleep(_ duration: Duration) async -> Bool {
+        await eventually("a \(duration) sleep is pending") { backend.sleeps.pending.contains(duration) }
+        return backend.sleeps.release { $0 == duration }
     }
 
     /// The nth display the platform made. Fails the test, rather than crashing it, if there is none.

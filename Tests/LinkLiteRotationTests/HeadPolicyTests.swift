@@ -24,12 +24,12 @@ func capturesTheLogicalSizeThatMacOSDraws(_ orientation: DisplayOrientation) {
     #expect(withDockCursor.captureSize == panel)
     #expect(withDockCursor.usesHardwareCursor)
     #expect(!withDockCursor.showsCursorInFrames)
-    #expect(!withDockCursor.sendsWholeFrames)
+    #expect(!withDockCursor.rotatesFrames)
 
     let withoutDockCursor = CapturePolicy(physical: panel, orientation: .standard, dockDrawsCursor: false)
     #expect(!withoutDockCursor.usesHardwareCursor)
     #expect(withoutDockCursor.showsCursorInFrames)
-    #expect(!withoutDockCursor.sendsWholeFrames)
+    #expect(!withoutDockCursor.rotatesFrames)
 }
 
 @Test(arguments: [DisplayOrientation.turnedClockwise, .upsideDown, .turnedCounterclockwise])
@@ -44,10 +44,9 @@ func rotatedHeadsDrawThePointerIntoFramesAndNeverUseTheDockCursor(_ orientation:
 }
 
 @Test(arguments: DisplayOrientation.allCases)
-func rotatedHeadsSendWholeFramesAndUnrotatedHeadsDoNot(_ orientation: DisplayOrientation) {
-    // Full-frame updates are the safe first step for rotation: no damage rectangles are mapped.
+func onlyRotatedHeadsRotateFrames(_ orientation: DisplayOrientation) {
     let policy = CapturePolicy(physical: panel, orientation: orientation, dockDrawsCursor: true)
-    #expect(policy.sendsWholeFrames == (orientation != .standard))
+    #expect(policy.rotatesFrames == (orientation != .standard))
 }
 
 @Test func asymmetricOddFramesAreMappedWithTheirOwnSize() {

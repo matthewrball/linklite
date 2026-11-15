@@ -66,11 +66,14 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
     /// Everything below is touched only on the capture queue.
     private var health = FrameHealth()
     private var loggedRejection = false
-    /// Set once the stream's first frame has been sent whole.
-    private var sentFirstFrame = false
+    /// Set once a frame has reached the engine, and cleared when a complete frame does not. ScreenCaptureKit's
+    /// damage is relative to the frame before, so until then (the stream's first frame, or after a frame was
+    /// dropped) the next frame is sent whole.
+    private var previousFrameSent = false
     /// Reused on the serial capture queue; the engine only borrows it during submitFrame.
     private var dirtyRects: [UInt32] = []
-    /// A rotated head's physical frame, rebuilt for every captured frame. Empty for an unrotated head.
+    /// A rotated head's physical frame. It keeps the last frame sent, so only damaged regions are rotated into it.
+    /// Empty for an unrotated head.
     private var rotatedFrame: [UInt8] = []
 
     private init(head: UInt8, monitor: HeadMonitor, orientation: DisplayOrientation, engine: EngineHandle,
@@ -214,7 +217,7 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         // Submitted while the gate is held open, so a stop that closes it waits for this frame and no later one
         // reaches the engine. A closed gate means the stream was retired meanwhile: the frame is dropped.
         guard let usable = gate.whileOpen({ () -> Bool in
-            policy.sendsWholeFrames ? submitRotated(pixelBuffer) : submitUnrotated(pixelBuffer, info: info)
+            policy.rotatesFrames ? submitRotated(pixelBuffer, info: info) : submitUnrotated(pixelBuffer, info: info)
         }) else { return }
         recordFrame(usable: usable, reason: "the frame could not be read")
     }
@@ -222,9 +225,13 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
     /// Counts one complete frame. The first usable frame reports `onUsableFrame`. A sustained run of unusable
     /// frames stops the stream and reports the failure. Runs on the capture queue.
     private func recordFrame(usable: Bool, reason: String) {
-        if !usable, !loggedRejection {
-            loggedRejection = true
-            log.error("Head \(self.head) frame rejected: \(reason, privacy: .public)")
+        if !usable {
+            // The engine (and a rotated head's raster) missed this frame's damage; the next frame goes whole.
+            previousFrameSent = false
+            if !loggedRejection {
+                loggedRejection = true
+                log.error("Head \(self.head) frame rejected: \(reason, privacy: .public)")
+            }
         }
         switch health.record(usable: usable) {
         case .firstUsable:
@@ -244,17 +251,24 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         onStop(error)
     }
 
-    /// Sends an unrotated frame with ScreenCaptureKit's damage rectangles. Returns false if the frame could not
-    /// be read. Runs on the capture queue.
-    private func submitUnrotated(_ pixelBuffer: CVPixelBuffer, info: [SCStreamFrameInfo: Any]) -> Bool {
+    /// ScreenCaptureKit's damage rectangles for this frame, in output-frame pixels, or nil if the frame must be
+    /// sent whole.
+    private func reportedDamage(_ info: [SCStreamFrameInfo: Any]) -> [NSDictionary]? {
         // ScreenCaptureKit reports what changed, in output-frame pixels (measured: a 62x60 menu bar
         // item on a 3840x2160 stream of a 1920x1080-point display). That holds only while the
         // display is captured 1:1; when macOS renders it at another size and the stream scales it
         // ("looks like" 2560x1440), the whole frame is sent. The first frame of a stream carries
         // no useful report, so it is sent whole too.
         let unscaled = (info[.contentScale] as? CGFloat).map { abs($0 - 1) < 0.001 } ?? false
+        guard previousFrameSent, unscaled else { return nil }
+        return info[.dirtyRects] as? [NSDictionary]
+    }
+
+    /// Sends an unrotated frame with ScreenCaptureKit's damage rectangles. Returns false if the frame could not
+    /// be read. Runs on the capture queue.
+    private func submitUnrotated(_ pixelBuffer: CVPixelBuffer, info: [SCStreamFrameInfo: Any]) -> Bool {
         var dirty: [UInt32]?
-        if sentFirstFrame, unscaled, let reported = info[.dirtyRects] as? [NSDictionary] {
+        if let reported = reportedDamage(info) {
             dirtyRects.removeAll(keepingCapacity: true)
             dirtyRects.reserveCapacity(reported.count * 4)
             for entry in reported {
@@ -274,14 +288,16 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
                            stride: CVPixelBufferGetBytesPerRow(pixelBuffer),
                            width: UInt32(policy.captureSize.width), height: UInt32(policy.captureSize.height),
                            dirty: dirty)
-        sentFirstFrame = true
+        previousFrameSent = true
         return true
     }
 
-    /// Rotates a whole captured frame into the head's physical raster and sends it as unknown damage (a
-    /// full frame). Returns false if the frame could not be read. Runs on the capture queue. Rotated heads
-    /// send every frame whole for now: ScreenCaptureKit's damage rectangles are not mapped yet.
-    private func submitRotated(_ pixelBuffer: CVPixelBuffer) -> Bool {
+    /// Rotates a captured frame into the head's physical raster and sends it. With usable damage, only the
+    /// damaged regions are rotated into the persistent raster and sent as physical rectangles; otherwise the whole
+    /// frame is rotated and sent as unknown damage. Returns false if the frame could not be read. Runs on the
+    /// capture queue.
+    private func submitRotated(_ pixelBuffer: CVPixelBuffer, info: [SCStreamFrameInfo: Any]) -> Bool {
+        let geometry = policy.geometry
         let logical = policy.captureSize
         let sourceStride = CVPixelBufferGetBytesPerRow(pixelBuffer)
         let destinationStride = Int(width) * 4
@@ -296,17 +312,43 @@ final class DisplayCapture: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return false }
         if rotatedFrame.count != destinationBytes {
             rotatedFrame = [UInt8](repeating: 0, count: destinationBytes)
+            previousFrameSent = false
         }
+        // Damage is used only while the raster holds the frame before this one (see previousFrameSent).
+        let reported = reportedDamage(info)
+        let source = UnsafeRawBufferPointer(start: base, count: sourceBytes)
         let rotated = rotatedFrame.withUnsafeMutableBytes { destination in
-            FrameRotator.rotate(source: UnsafeRawBufferPointer(start: base, count: sourceBytes),
-                                sourceStride: sourceStride, into: destination,
-                                destinationStride: destinationStride, geometry: policy.geometry)
+            guard let reported else {
+                return FrameRotator.rotate(source: source, sourceStride: sourceStride, into: destination,
+                                           destinationStride: destinationStride, geometry: geometry)
+            }
+            dirtyRects.removeAll(keepingCapacity: true)
+            dirtyRects.reserveCapacity(reported.count * 4)
+            for entry in reported {
+                guard let rect = CGRect(dictionaryRepresentation: entry),
+                      let damaged = geometry.logicalRect(minX: rect.minX, minY: rect.minY,
+                                                         maxX: rect.maxX, maxY: rect.maxY),
+                      let region = geometry.physicalRect(damaged)
+                else { continue }
+                guard FrameRotator.rotate(source: source, sourceStride: sourceStride, into: destination,
+                                          destinationStride: destinationStride, geometry: geometry, region: region)
+                else { return false }
+                // Inside the physical raster, whose size came from UInt32 width and height.
+                dirtyRects.append(UInt32(region.x))
+                dirtyRects.append(UInt32(region.y))
+                dirtyRects.append(UInt32(region.width))
+                dirtyRects.append(UInt32(region.height))
+            }
+            return true
         }
+        // A failure may leave the raster partly updated. recordFrame clears previousFrameSent, so the next frame
+        // is rotated and sent whole.
         guard rotated else { return false }
         rotatedFrame.withUnsafeBufferPointer { frame in
             engine.submitFrame(head: head, bgra: frame.baseAddress!, stride: destinationStride,
-                               width: width, height: height, dirty: nil)
+                               width: width, height: height, dirty: reported == nil ? nil : dirtyRects)
         }
+        previousFrameSent = true
         return true
     }
 

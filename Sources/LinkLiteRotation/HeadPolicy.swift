@@ -44,9 +44,9 @@ public struct CapturePolicy: Equatable, Sendable {
     /// The pointer is part of the captured frames whenever the hardware cursor is not in use.
     public var showsCursorInFrames: Bool { !usesHardwareCursor }
 
-    /// Rotated frames are sent whole. ScreenCaptureKit's damage rectangles are not mapped to physical
-    /// rectangles yet, so an unrotated head keeps its damage path and a rotated one sends every frame.
-    public var sendsWholeFrames: Bool { geometry.orientation != .standard }
+    /// A rotated head's frames are rotated into the physical raster before they reach the engine, with
+    /// ScreenCaptureKit's damage mapped to physical rectangles. An unrotated head's frames go straight through.
+    public var rotatesFrames: Bool { geometry.orientation != .standard }
 }
 
 /// What a change of orientation requires for a head that is already attached.

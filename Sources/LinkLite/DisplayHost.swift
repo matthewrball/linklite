@@ -95,11 +95,20 @@ final class DisplayHost {
     private func makeRuntime() -> HeadRuntime<VirtualDisplay, DisplayCapture> {
         let defaults = UserDefaults.standard
         let engine = self.engine
+        // Mode records from when a portrait display shared its landscape identity are dropped once, so both
+        // shapes get their default mode again (see MonitorKey.configuredModesWithoutSharedPortraits).
+        let storedModes = defaults.stringArray(forKey: Self.configuredMonitorsKey) ?? []
+        let configuredModes = MonitorKey.configuredModesWithoutSharedPortraits(
+            storedModes, portraitIdentities: Set(identities.records.portraits.values))
+        if configuredModes != storedModes {
+            log.info("Dropping default-mode records made while portrait displays shared their landscape identity")
+            defaults.set(configuredModes, forKey: Self.configuredMonitorsKey)
+        }
         let runtime = HeadRuntime(
             controller: HeadController(
                 preferences: OrientationPreferences(
                     propertyList: defaults.dictionary(forKey: OrientationPreferences.defaultsKey)),
-                configuredModes: defaults.stringArray(forKey: Self.configuredMonitorsKey) ?? []),
+                configuredModes: configuredModes),
             platform: HeadPlatform(
                 createDisplay: { [weak self] monitor, orientation, attached, onTerminated in
                     guard let self else { return .failed("LinkLite is quitting") }
@@ -291,15 +300,20 @@ final class DisplayHost {
     // MARK: - Displays
 
     /// Makes the virtual display for `monitor`, claiming its identity against the monitors on the other heads.
-    /// A claim that is refused means the identity is still held by a display being released: the head waits.
+    /// A portrait display claims the portrait identity paired with the monitor's landscape one, so macOS keeps
+    /// separate settings for the two shapes. A claim that is refused means the identity is still held by a
+    /// display being released: the head waits.
     private func createDisplay(monitor: HeadMonitor, orientation: DisplayOrientation, attached: [AttachedMonitor],
                                onTerminated: @escaping @MainActor () -> Void) -> DisplayCreation<VirtualDisplay> {
         guard let claim = identities.claim(reported: monitor.reportedIdentity, head: monitor.head,
-                                           attached: attached, configured: configuredIdentities) else {
+                                           attached: attached, configured: configuredIdentities,
+                                           portrait: orientation.swapsAxes) else {
             log.info("Head \(monitor.head): its identity is still held by a display being removed; waiting")
             return .identityHeld
         }
-        if claim.identity != monitor.reportedIdentity {
+        if orientation.swapsAxes {
+            log.info("Head \(monitor.head) portrait display uses identity \(claim.identity.configurationKey, privacy: .public)")
+        } else if claim.identity != monitor.reportedIdentity {
             log.info("Head \(monitor.head) reports the same identity as another display; giving it a distinct serial")
         }
         do {
@@ -313,7 +327,7 @@ final class DisplayHost {
     }
 
     /// The identities macOS already keeps per-display settings for (ConfiguredMonitors). A generated serial avoids
-    /// them, so it never inherits another monitor's settings. Portrait entries name the same identity.
+    /// them, so it never inherits another monitor's settings. A portrait entry names its display's identity.
     private var configuredIdentities: Set<DisplayIdentity> {
         Set((UserDefaults.standard.stringArray(forKey: Self.configuredMonitorsKey) ?? []).compactMap { entry in
             let suffix = MonitorKey.portraitRecordSuffix

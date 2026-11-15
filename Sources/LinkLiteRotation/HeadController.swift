@@ -71,6 +71,11 @@ public enum HeadTiming {
     public static let reconnectGrace: Duration = .seconds(20)
     /// Mode setup attempts per display before the mode is reported as unavailable.
     public static let maxModeAttempts = 6
+    /// A capture start or stop that has not returned this long after it began is given up: a start fails and is
+    /// retried, a stop is kept as unconfirmed and retried. Without it, one platform call that never returns would
+    /// hold its head, and the head's display, for good. Longer than the start's own wait for a new display to
+    /// become capturable (20 probes, 250 ms apart).
+    public static let captureOperationTimeout: Duration = .seconds(15)
 
     /// Capture restart delays after failures: 1, 2, 4, 8, 16, then 30 s. Reset only by a usable frame.
     public static func captureRetryDelay(afterFailures failures: Int) -> Duration {
