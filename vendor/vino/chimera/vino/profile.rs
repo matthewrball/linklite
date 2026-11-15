@@ -735,7 +735,7 @@ pub(crate) static PROFILE_RIDGE: DockProfile = DockProfile {
         band_parity_bit: true,
         strip_blocks_x: 8,
         interlaced_bands: false,
-        // Local displaylink-lite patch (vendor/vino/UPSTREAM.md): upstream calls Ridge double
+        // Local LinkLite patch (vendor/vino/UPSTREAM.md): upstream calls Ridge double
         // buffered, but its frame trailer cycles three ring phases (0, 2, 4) and the vendor's wire
         // fills them in equal thirds. Two keyframe presentations left one slot stale, seen on an
         // M/Connect 2 as patches flickering on a still screen. Three reach every slot either way.

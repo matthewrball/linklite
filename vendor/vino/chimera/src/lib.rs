@@ -25,7 +25,7 @@ pub mod ddcci;
 pub mod edid_fetch;
 pub mod kshim;
 pub mod kvino;
-/// Persistent worker pool for the engine's parallel passes (local displaylink-lite patch).
+/// Persistent worker pool for the engine's parallel passes (local LinkLite patch).
 pub mod pool;
 pub mod prove;
 #[cfg(feature = "revdi")]

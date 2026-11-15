@@ -38,7 +38,7 @@ pub enum Plan {
 }
 
 /// Cap on the number of damage rectangles handed to the codec. Change too scattered to describe
-/// exactly within it is sent as a coarser superset (local displaylink-lite patch).
+/// exactly within it is sent as a coarser superset (local LinkLite patch).
 const MAX_RECTS: usize = 128;
 
 /// One frame's worth of EP08 records, and how many times to present it.
@@ -67,12 +67,12 @@ pub struct HeadScanout {
     /// repair it.
     bodies: Vec<Option<Vec<u8>>>,
     body_hashes: Vec<u64>,
-    /// Strips that changed since the last [`HeadScanout::settle`]. Local displaylink-lite patch:
+    /// Strips that changed since the last [`HeadScanout::settle`]. Local LinkLite patch:
     /// once the surface goes still they are sent to every dock buffer again, so a transmission the
     /// dock missed or put in the wrong buffer while things were moving cannot leave a stale box.
     touched: Vec<bool>,
     /// Whether the last plan was the coarse superset for change too scattered for [`MAX_RECTS`].
-    /// Local displaylink-lite patch, for performance counters.
+    /// Local LinkLite patch, for performance counters.
     last_plan_coarse: bool,
 }
 
@@ -102,7 +102,7 @@ impl HeadScanout {
     }
 
     /// Whether the last [`HeadScanout::plan_dirty`] fell back to a coarse superset because the
-    /// change was too scattered for [`MAX_RECTS`] exact rectangles. Local displaylink-lite patch.
+    /// change was too scattered for [`MAX_RECTS`] exact rectangles. Local LinkLite patch.
     pub fn last_plan_coarse(&self) -> bool {
         self.last_plan_coarse
     }
@@ -138,7 +138,7 @@ impl HeadScanout {
 
     /// [`HeadScanout::plan`] where only strips meeting `dirty` (half-open `(x0, y0, x1, y1)`
     /// pixel rectangles) can have changed since the last planned surface; `None` means anything
-    /// may have. Only those strips are hashed. Local displaylink-lite patch: the macOS capture
+    /// may have. Only those strips are hashed. Local LinkLite patch: the macOS capture
     /// reports exactly what changed, and hashing a whole 4K surface for a ticking clock was the
     /// largest steady CPU cost.
     pub fn plan_dirty(
@@ -187,7 +187,7 @@ impl HeadScanout {
         // Change too scattered to list exactly (App Exposé, a desktop swipe) is sent as a coarse
         // superset once, like any delta, rather than as a keyframe presented to every dock buffer
         // back to back: the retransmit debt still carries each changed strip to every buffer, and a
-        // superset only resends strips the dock already holds (local displaylink-lite patch).
+        // superset only resends strips the dock already holds (local LinkLite patch).
         let exact = owed_rects(&self.debt, tiles_x, tiles_y, strip_w, strip_h);
         self.last_plan_coarse = exact.is_none();
         let rects =
@@ -349,7 +349,7 @@ fn strip_hash(rgb: &[u8], w_pad: usize, strip_w: usize, strip_h: usize, tx: usiz
     h.finish()
 }
 
-/// Change-detection hash of a strip, fed one pixel line at a time. Local displaylink-lite patch.
+/// Change-detection hash of a strip, fed one pixel line at a time. Local LinkLite patch.
 ///
 /// Eight independent multiply-xor lanes take one 8-byte word each per 64-byte step and are
 /// folded together at the end, so their multiplies overlap instead of each waiting on the last
@@ -399,7 +399,7 @@ impl StripHasher {
 const PARALLEL_MIN_ITEMS: usize = 64;
 
 /// Run `f(index, item)` over `items` on at most `threads` threads of the shared worker pool.
-/// Local displaylink-lite patch; see vendor/vino/UPSTREAM.md.
+/// Local LinkLite patch; see vendor/vino/UPSTREAM.md.
 fn par_for_each_mut<T: Send>(items: &mut [T], threads: usize, f: impl Fn(usize, &mut T) + Sync) {
     if items.len() < PARALLEL_MIN_ITEMS {
         items.iter_mut().enumerate().for_each(|(i, item)| f(i, item));
@@ -529,7 +529,7 @@ mod tests {
         assert_eq!(head.plan(128, 32, &rgb), Plan::Idle);
     }
 
-    /// Local displaylink-lite patch: change too scattered for MAX_RECTS exact rectangles (App
+    /// Local LinkLite patch: change too scattered for MAX_RECTS exact rectangles (App
     /// Exposé, a desktop swipe) is planned as one coarse delta covering every changed strip, not a
     /// keyframe presented to every buffer at once, and it still reaches every dock buffer.
     #[test]
@@ -568,7 +568,7 @@ mod tests {
         assert_eq!(head.plan(w, h, &rgb), Plan::Idle);
     }
 
-    /// Local displaylink-lite patch: a dirty hint covering the change plans what a full hash
+    /// Local LinkLite patch: a dirty hint covering the change plans what a full hash
     /// plans, and strips outside it are not looked at.
     #[test]
     fn a_dirty_hint_plans_like_a_full_hash() {
@@ -592,7 +592,7 @@ mod tests {
         assert_eq!(other.plan_dirty(128, 32, &rgb, Some(&[])), Plan::Idle);
     }
 
-    /// Local displaylink-lite patch: a settle re-owes what changed since the last settle, once.
+    /// Local LinkLite patch: a settle re-owes what changed since the last settle, once.
     #[test]
     fn settle_resends_only_what_changed_since_the_last_settle() {
         let mut head = HeadScanout::new(ridge());
@@ -690,7 +690,7 @@ mod tests {
         assert_eq!(head.plan(192, 32, &surface(192, 32, 0x20)), Plan::Keyframe);
     }
 
-    /// Local displaylink-lite patch: the lane-split hasher still sees every byte and its place.
+    /// Local LinkLite patch: the lane-split hasher still sees every byte and its place.
     #[test]
     fn strip_hasher_notices_any_byte_and_any_line_swap() {
         let hash = |lines: &[&[u8]]| {
