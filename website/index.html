@@ -87,14 +87,15 @@
   .scroll-beat { height: 100vh; height: 100svh; pointer-events: none; }
   .film-hero { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; padding: 24px 24px 72px; text-align: center; }
   .film-hero-content { display: flex; flex-direction: column; align-items: center; justify-content: center; transform-origin: 50% 42%; will-change: transform,opacity; }
-  .film-hero-icon { width: clamp(96px,9vw,124px); height: auto; margin-bottom: 18px; filter: drop-shadow(0 22px 30px rgba(0,0,0,.42)); }
-  .film-hero h1 { margin: 0; font-size: clamp(48px,5.5vw,70px); line-height: .95; letter-spacing: -.052em; font-weight: 650; }
-  .film-hero p { margin: 16px auto 0; max-width: 31rem; color: var(--sub); font-size: clamp(16px,1.6vw,19px); line-height: 1.45; }
-  .film-hero .dl { margin-top: 24px; min-height: 46px; padding-inline: 21px; }
-  .hero-kicker { color: var(--mint) !important; font-size: 11px !important; font-weight: 650; letter-spacing: .18em; text-transform: uppercase; margin: 0 0 13px !important; }
-  .scroll-cue { position: absolute; left: 28px; bottom: 30px; display: flex; align-items: center; gap: 9px; color: var(--faint); font-size: 12px; letter-spacing: .02em; }
-  .scroll-cue::before { content: "↓"; color: var(--mint); font-size: 16px; }
+  .film-hero-icon { width: clamp(120px,12vw,168px); height: auto; margin-bottom: 22px; filter: drop-shadow(0 26px 36px rgba(0,0,0,.44)); }
+  .film-hero h1 { margin: 0; font-size: clamp(64px,7.6vw,108px); line-height: .95; letter-spacing: -.052em; font-weight: 650; }
+  .film-hero p { margin: 18px auto 0; max-width: none; white-space: nowrap; color: var(--sub); font-size: clamp(18px,1.8vw,23px); line-height: 1.45; }
+  .film-hero .dl { margin-top: 28px; min-height: 50px; padding-inline: 25px; font-size: 16px; }
+  .scroll-cue { position: absolute; left: 50%; bottom: 28px; display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid rgba(100,212,166,.28); border-radius: 50%; color: var(--mint); background: radial-gradient(circle,rgba(100,212,166,.13),rgba(100,212,166,.035)); box-shadow: 0 8px 28px rgba(0,0,0,.25),0 0 30px rgba(100,212,166,.06),inset 0 1px 0 rgba(255,255,255,.07); animation: scroll-cue-drift 2.8s ease-in-out infinite; will-change: transform; }
+  .scroll-cue svg { width: 18px; height: 18px; }
+  @keyframes scroll-cue-drift { 0%,100% { transform: translate3d(-50%,0,0); } 50% { transform: translate3d(-50%,5px,0); } }
   .film-set { position: absolute; left: 50%; top: 50%; z-index: 5; width: 1440px; height: 720px; transform: translate(-50%,-48%) scale(1); transform-origin: center; perspective: 1600px; }
+  .film-heading { position: absolute; z-index: 6; top: max(96px,11vh); left: 50%; width: min(760px,calc(100% - 48px)); margin: 0; transform: translate3d(-50%,12px,0); text-align: center; color: var(--cream); font-size: clamp(32px,4.2vw,58px); line-height: 1.05; letter-spacing: -.04em; font-weight: 630; opacity: 0; will-change: transform,opacity; }
   .device { position: absolute; will-change: transform,opacity; }
   .mac { left: 390px; top: 138px; width: 660px; z-index: 3; transform-origin: 50% 50%; }
   .mac-screen { position: relative; width: 100%; aspect-ratio: 16/10; padding: 10px 10px 19px; border-radius: 18px 18px 10px 10px; background: linear-gradient(145deg,#464a53,#11141b 38%,#05070b 80%); box-shadow: 0 -1px 0 rgba(255,255,255,.32) inset,0 0 0 1px rgba(255,255,255,.12),0 42px 70px rgba(0,0,0,.52),0 8px 24px rgba(0,0,0,.4); }
@@ -134,10 +135,10 @@
   .preview-body { height: calc(100% - 23px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 18px 10px; text-align: center; }
   .preview-stat { margin: 0; color: #16244f; font-size: 80px; line-height: .95; letter-spacing: -.055em; font-weight: 700; }
   .preview-label { margin: 10px 0 16px; font-size: 22px; line-height: 1.2; font-weight: 650; }
-  .compare { width: 100%; display: grid; gap: 4px; }
-  .compare-row { display: grid; grid-template-columns: 78px 1fr 55px; gap: 7px; align-items: center; font-size: 8px; color: #6a6c75; text-align: left; }
+  .compare { width: 78%; display: grid; gap: 7px; }
+  .compare-row { display: grid; grid-template-columns: 88px minmax(0,1fr) 62px; gap: 9px; align-items: center; font-size: 10.5px; color: #5b5e68; text-align: left; }
   .compare-row b { color: #30323c; font-weight: 600; text-align: right; }
-  .compare-track { height: 4px; border-radius: 99px; background: #dedfe4; overflow: hidden; }
+  .compare-track { height: 8px; border-radius: 99px; background: #d5d7de; overflow: hidden; }
   .compare-fill { display: block; height: 100%; width: var(--value); border-radius: inherit; background: #a4a8b5; }
   .compare-row.lite .compare-fill { background: #55b58f; }
   .preview-foot { margin: 8px 0 0; color: #83858d; font-size: 5.5px; }
@@ -149,19 +150,25 @@
   .monitor .preview-body { height: calc(100% - 15px); padding: 5px 10px; }
   .monitor .preview-stat { font-size: 54px; }
   .monitor .preview-label { margin: 7px 0 10px; font-size: 16px; }
-  .monitor .compare-row { grid-template-columns: 55px 1fr 37px; gap: 4px; font-size: 5.5px; }
-  .monitor .compare-track { height: 3px; }
+  .monitor .compare { width: 82%; gap: 5px; }
+  .monitor .compare-row { grid-template-columns: 62px minmax(0,1fr) 42px; gap: 5px; font-size: 7px; }
+  .monitor .compare-track { height: 6px; }
   .monitor .preview-foot { margin-top: 5px; font-size: 3.7px; }
   .film-note { position: absolute; z-index: 6; left: 50%; bottom: 44px; width: min(680px,80vw); transform: translateX(-50%); text-align: center; color: var(--faint); font-size: 11px; line-height: 1.5; opacity: 0; }
+  .film-note a { color: var(--sub); text-underline-offset: 3px; }
+  .film-note a:hover { color: var(--cream); }
   .after-film { position: relative; z-index: 6; background: var(--navy); border-top: 1px solid var(--line); }
   .page-section { width: min(1080px,calc(100% - 48px)); margin: 0 auto; padding: 120px 0; border-bottom: 1px solid var(--line); }
   .page-section .eyebrow { margin: 0 0 14px; color: var(--mint); font-size: 11px; font-weight: 650; letter-spacing: .18em; text-transform: uppercase; }
   .page-section h2 { max-width: 13ch; margin: 0; font-size: clamp(38px,5.5vw,68px); line-height: 1; letter-spacing: -.045em; font-weight: 630; }
   .page-intro { max-width: 37rem; margin: 22px 0 0; color: var(--sub); font-size: 18px; line-height: 1.55; }
-  .fact-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 36px; margin-top: 70px; }
-  .fact { padding-top: 18px; border-top: 1px solid rgba(143,220,184,.42); }
-  .fact b { display: block; margin-bottom: 9px; font-size: 17px; font-weight: 620; }
-  .fact p { margin: 0; color: var(--faint); font-size: 15px; line-height: 1.55; }
+  #work h2 { max-width: 20ch; text-wrap: balance; }
+  .fact-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; margin-top: 56px; overflow: hidden; border: 1px solid rgba(167,158,140,.15); border-radius: 20px; background: linear-gradient(145deg,rgba(27,36,68,.65),rgba(12,18,43,.4)); box-shadow: 0 24px 60px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.055); }
+  .fact { padding: 30px 28px 32px; }
+  .fact + .fact { border-left: 1px solid rgba(167,158,140,.14); }
+  .fact-icon { display: grid; place-items: center; width: 42px; height: 42px; margin-bottom: 24px; border: 1px solid rgba(100,212,166,.19); border-radius: 12px; background: rgba(100,212,166,.065); color: var(--mint); }
+  .fact b { display: block; margin-bottom: 10px; font-size: 17px; font-weight: 620; }
+  .fact p { margin: 0; color: #9293a4; font-size: 15px; line-height: 1.65; }
   .benchmark-layout { display: grid; grid-template-columns: .8fr 1.2fr; gap: 56px; align-items: center; }
   .chart { width: 100%; margin: 0; border-radius: 16px; display: block; }
   .tradeoff { margin-top: 20px; padding-left: 16px; border-left: 2px solid var(--mint); color: var(--sub); font-size: 15px; line-height: 1.55; }
@@ -170,11 +177,11 @@
   .install-meta { max-width: 34rem; }
   .hash { margin: 14px 0 0; font-family: ui-monospace,"SF Mono",Menlo,monospace; font-size: 12px; color: var(--faint); overflow-wrap: anywhere; }
   .foot {
-    width: 100%; max-width: 46rem; margin: 0 auto; border-top: 1px solid var(--line);
+    width: 100%; margin: 0; border-top: 1px solid var(--line);
     padding: 32px max(24px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));
     display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: center; justify-content: space-between;
   }
-  .foot .dom { display: inline-flex; align-items: center; gap: .7rem; font-family: ui-serif,"New York","Iowan Old Style",Georgia,serif; font-size: 22px; font-weight: 600; color: var(--cream); letter-spacing: 0; }
+  .foot .dom { display: inline-flex; align-items: center; gap: .7rem; font-family: inherit; font-size: 22px; font-weight: 650; color: var(--cream); letter-spacing: -.035em; }
   .foot .dom img { width: 34px; height: 34px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.22); }
   .foot nav { display: flex; gap: 1.4rem; flex-wrap: wrap; font-size: 13.5px; }
   .foot nav a { color: rgba(243,236,219,.60); text-decoration: none; }
@@ -191,7 +198,8 @@
     .foot .disclaimer span:last-child { text-align: left; }
   }
   @media (min-width: 761px) and (max-width: 1100px) {
-    .fact-grid { grid-template-columns: 1fr; gap: 28px; margin-top: 48px; }
+    .fact-grid { grid-template-columns: 1fr; gap: 0; margin-top: 48px; }
+    .fact + .fact { border-left: 0; border-top: 1px solid rgba(167,158,140,.14); }
     .benchmark-layout { grid-template-columns: 1fr; gap: 44px; }
     .benchmark-layout .chart { max-width: 760px; }
   }
@@ -203,12 +211,17 @@
     .nav .brand { display: inline-flex; align-items: center; }
     .nav .dl { padding-inline: 16px; font-size: 14px; }
     .film-hero { padding: 24px 20px calc(56px + env(safe-area-inset-bottom)); }
-    .film-hero p:not(.hero-kicker) { max-width: 30ch; }
+    .film-hero p { max-width: 30ch; white-space: normal; }
+    .film-heading { top: calc(max(64px,env(safe-area-inset-top,0px) + 64px) + 16px); font-size: clamp(30px,8vw,38px); }
+    .film-set { top: 44%; }
     .scroll-cue { display: none; }
     .scroll-beat { height: 50vh; height: 50svh; }
     .film-note { bottom: calc(44px + env(safe-area-inset-bottom)); width: calc(100% - 40px); font-size: 11px; line-height: 1.55; }
     .fact-grid,.benchmark-layout,.install-section { grid-template-columns: 1fr; }
-    .fact-grid { gap: 26px; margin-top: 44px; }
+    .fact-grid { gap: 0; margin-top: 44px; border-radius: 16px; }
+    .fact + .fact { border-left: 0; border-top: 1px solid rgba(167,158,140,.14); }
+    .fact { padding: 26px 24px 28px; }
+    .fact-icon { margin-bottom: 20px; }
     .benchmark-layout { gap: 36px; }
     .page-section { width: min(1080px,calc(100% - 40px)); padding: 82px 0; }
     .page-section h2 { max-width: 16ch; }
@@ -223,8 +236,9 @@
   @media (max-height: 520px) and (orientation: landscape) {
     .nav { min-height: 56px; }
     .film-hero { padding-block: 16px 44px; }
-    .film-hero-icon { width: 72px; margin-bottom: 8px; }
-    .film-hero h1 { font-size: 40px; }
+    .film-hero-icon { width: 88px; margin-bottom: 8px; }
+    .film-hero h1 { font-size: 52px; }
+    .film-heading { top: 72px; font-size: 26px; }
     .film-hero p { margin-top: 8px; }
     .film-hero .dl { margin-top: 12px; }
     .scroll-beat { height: 50vh; height: 50svh; }
@@ -239,6 +253,7 @@
     .film-sticky { position: relative; height: auto; min-height: 100svh; overflow: hidden; padding-bottom: 54px; }
     .film-hero { position: relative; min-height: 100svh; opacity: 1 !important; visibility: visible !important; }
     .film-hero-content { transform: none !important; opacity: 1 !important; }
+    .film-heading { position: relative; top: auto; left: auto; margin: 0 auto 24px; transform: none !important; opacity: 1 !important; }
     .film-set { position: relative; left: auto; top: auto; width: 100%; height: auto; padding: 20px 20px 54px; display: grid; gap: 46px; transform: none !important; }
     .device { position: relative; inset: auto !important; width: min(520px,88vw) !important; margin: auto; opacity: 1 !important; transform: none !important; container-type: inline-size; }
     .monitor { width: min(400px,82vw) !important; }
@@ -264,13 +279,13 @@
       <div class="film-hero" data-film-hero>
         <div class="film-hero-content" data-hero-content>
           <img class="film-hero-icon" src="assets/logo.png" width="512" height="512" alt="LinkLite app icon: navy and mint display frames on a cream tile.">
-          <p class="hero-kicker">Your dock. Three displays. One small app.</p>
           <h1 class="mark">Link<span>Lite</span></h1>
           <p>The lightweight driver for DisplayLink docks on macOS.</p>
           <a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download for macOS</a>
         </div>
-        <span class="scroll-cue">Scroll to see it in motion</span>
+        <span class="scroll-cue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15m-6-6 6 6 6-6"/></svg></span>
       </div>
+      <h2 class="film-heading" data-film-heading>Compared to DisplayLink:</h2>
       <div class="film-set" data-film-set aria-label="A MacBook and two external displays showing LinkLite benchmark comparisons">
         <div class="device monitor left" data-left><div class="monitor-screen">
           <div class="desktop"><div class="desktop-menubar" aria-hidden="true"><span>● &nbsp;LinkLite&nbsp;&nbsp; File&nbsp;&nbsp; Edit&nbsp;&nbsp; View&nbsp;&nbsp; Window</span><span>⌁ &nbsp; 17:41</span></div>
@@ -291,7 +306,7 @@
           </div>
         </div><div class="monitor-stand"></div><div class="monitor-foot"></div></div>
       </div>
-      <p class="film-note" data-film-note>Two 4K displays · LinkLite 0.2.0 vs DisplayLink Manager 16.1.25 · 3 November 2026 <br>Not remeasured for 0.3.17. LinkLite used more CPU; app size is a separate comparison.</p>
+      <p class="film-note" data-film-note inert>Benchmarked on two 4K displays, 3 November 2026. <a href="https://github.com/matthewrball/linklite/blob/main/docs/BENCHMARK.md" rel="noopener" target="_blank">Results and methodology ↗</a></p>
     </div>
     <div class="scroll-beat" aria-hidden="true"></div><div class="scroll-beat" aria-hidden="true"></div><div class="scroll-beat" aria-hidden="true"></div><div class="scroll-beat" aria-hidden="true"></div>
   </section>
@@ -300,9 +315,9 @@
       <p class="eyebrow">How it works</p><h2>Three displays. <br>Nothing extra running.</h2>
       <p class="page-intro">LinkLite creates one virtual display per dock monitor, reads changed areas with ScreenCaptureKit, and sends the pixels straight to the dock. No backend. No login-window agent.</p>
       <div class="fact-grid">
-        <div class="fact"><b>One display per monitor</b><p>Native 4K60 on the tested dock. Changed 64×16 tiles are sent again; settled areas are not re-encoded every frame.</p></div>
-        <div class="fact"><b>The dock draws the pointer</b><p>Moving the mouse sends a few bytes of position data, not another full-screen encode.</p></div>
-        <div class="fact"><b>Your pixels stay local</b><p>Screen Recording reads only the virtual displays. Captured pixels go over USB, not to a server. No telemetry.</p></div>
+        <div class="fact"><span class="fact-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="15" height="11" rx="2"/><path d="M8 20h8m-4-4v4"/><rect x="10" y="8" width="12" height="10" rx="2" fill="#111831"/></svg></span><b>One display per monitor</b><p>Native 4K60 on the tested dock. Changed 64×16 tiles are sent again; settled areas are not re-encoded every frame.</p></div>
+        <div class="fact"><span class="fact-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="m5 3 14 12-7 1-3 6-4-19Z" fill="rgba(100,212,166,.12)"/><path d="m13 16 4 5" stroke-linecap="round"/></svg></span><b>The dock draws the pointer</b><p>Moving the mouse sends a few bytes of position data, not another full-screen encode.</p></div>
+        <div class="fact"><span class="fact-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="m12 3 7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3Z"/><path d="m8.5 12 2.5 2.5 4.5-5" stroke-linecap="round"/></svg></span><b>Your pixels stay local</b><p>Screen Recording reads only the virtual displays. Captured pixels go over USB, not to a server. No telemetry.</p></div>
       </div>
     </section>
     <section class="page-section benchmark-layout" id="proof">
@@ -336,11 +351,11 @@
   const heroIcon = film.querySelector(".film-hero-icon");
   const set = film.querySelector("[data-film-set]");
   const mac = film.querySelector("[data-mac]");
-  const macScreen = mac.querySelector(".mac-screen");
   const macBase = mac.querySelector(".mac-base");
   const left = film.querySelector("[data-left]");
   const right = film.querySelector("[data-right]");
   const note = film.querySelector("[data-film-note]");
+  const heading = film.querySelector("[data-film-heading]");
   const dockIcon = film.querySelector("[data-dock-icon]");
   const previews = [...film.querySelectorAll("[data-preview]")];
   const nav = film.querySelector("[data-site-nav]");
@@ -354,9 +369,8 @@
     el.style.opacity = String(p);
     el.style.filter = `blur(${3*(1-p)}px)`;
     if (el.dataset.preview === "memory") {
-      const topInset = 38*(1-p);
-      el.style.transform = `translate3d(0,${34*(1-p)}px,0) scale(${.12+.88*p},${.04+.96*p})`;
-      el.style.clipPath = p >= 1 ? "none" : `polygon(44% 100%,56% 100%,${100-topInset}% 0,${topInset}% 0)`;
+      el.style.transform = `translate3d(0,${12*(1-p)}px,0) scale(${.055+.945*p})`;
+      el.style.clipPath = "none";
     } else {
       el.style.transform = `translate3d(0,${18*(1-p)}px,0) scale(${.94+.06*p})`;
       el.style.clipPath = "none";
@@ -367,6 +381,7 @@
     if (reduced.matches) {
       nav.classList.add("is-visible");
       nav.inert = false;
+      note.inert = false;
       return;
     }
     const viewport = innerHeight;
@@ -375,8 +390,8 @@
     const p = clamp((scrollY-start)/duration);
     const reservedHeight = compact.matches ? Math.min(260,viewport*.45) : 128;
     const fit = Math.min((innerWidth-16)/1480,Math.max(80,viewport-reservedHeight)/720,1);
-    const heroOut = ramp(p,.015,.12);
-    const macIn = arrive(ramp(p,.015,.24));
+    const heroOut = ramp(p,0,.085);
+    const macIn = arrive(ramp(p,.035,.24));
     const leftIn = arrive(ramp(p,.27,.48));
     const rightIn = arrive(ramp(p,.5,.72));
     heroContent.style.opacity = String(1-heroOut);
@@ -384,14 +399,8 @@
     heroContent.style.transform = `translate3d(0,${-30*heroOut}px,0) scale(${1-.035*heroOut})`;
     hero.style.visibility = heroOut >= 1 ? "hidden" : "visible";
     set.style.transform = `translate(-50%,-48%) scale(${fit})`;
-    const setBounds = set.getBoundingClientRect();
-    const iconBounds = heroIcon.getBoundingClientRect();
-    const startScale = iconBounds.width/(mac.offsetWidth*fit);
-    const finalScreenCenterY = setBounds.top+(mac.offsetTop+macScreen.offsetHeight/2)*fit;
-    const iconCenterY = iconBounds.top+iconBounds.height/2;
-    const morphY = (iconCenterY-finalScreenCenterY)/fit;
-    mac.style.opacity = String(ramp(p,.005,.045));
-    mac.style.transform = `translate3d(0,${morphY*(1-macIn)}px,0) scale(${startScale+(1-startScale)*macIn})`;
+    mac.style.opacity = String(ramp(p,.06,.14));
+    mac.style.transform = `translate3d(0,${220*(1-macIn)}px,0)`;
     macBase.style.opacity = String(ramp(p,.11,.22));
     left.style.opacity = String(leftIn);
     left.style.transform = `translate3d(${-620*(1-leftIn)}px,${34*(1-leftIn)}px,0) rotate(${-4*(1-leftIn)}deg)`;
@@ -399,10 +408,15 @@
     right.style.transform = `translate3d(${620*(1-rightIn)}px,${34*(1-rightIn)}px,0) rotate(${4*(1-rightIn)}deg)`;
     const dockBounce = Math.sin(ramp(p,.15,.29)*Math.PI);
     dockIcon.style.transform = `translate3d(0,${-4*dockBounce}px,0) scale(${1+.12*dockBounce})`;
+    const headingIn = arrive(ramp(p,.15,.26));
+    heading.style.opacity = String(headingIn);
+    heading.style.transform = `translate3d(-50%,${12*(1-headingIn)}px,0)`;
     previewIn(previews.find(el => el.dataset.preview === "memory"),arrive(ramp(p,.18,.3)));
     previewIn(previews.find(el => el.dataset.preview === "gpu"),arrive(ramp(p,.42,.57)));
     previewIn(previews.find(el => el.dataset.preview === "size"),arrive(ramp(p,.66,.82)));
-    note.style.opacity = String(ramp(p,.82,.94));
+    const noteIn = ramp(p,.82,.94);
+    note.style.opacity = String(noteIn);
+    note.inert = noteIn === 0;
     const navVisible = scrollY > start+viewport*.58;
     nav.classList.toggle("is-visible",navVisible);
     nav.inert = !navVisible;
