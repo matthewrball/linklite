@@ -27,7 +27,7 @@ import Testing
 
     c.recorder.holdModes = true
     await c.eventually("the mode retry is due") { c.backend.sleeps.pending.contains(.seconds(1)) }
-    c.backend.sleeps.release { $0 == .seconds(1) }
+    await c.releaseSleep(.seconds(1))
     await c.eventually("the retry is held inside its call") { c.recorder.heldModeCount == 1 }
     let oldDisplayModeCalls = c.recorder.modeDisplays.filter { $0 == 1 }.count
 
@@ -66,7 +66,7 @@ import Testing
 
     c.recorder.holdModes = true
     await c.eventually("the mode retry is due") { c.backend.sleeps.pending.contains(.seconds(1)) }
-    c.backend.sleeps.release { $0 == .seconds(1) }
+    await c.releaseSleep(.seconds(1))
     await c.eventually("the retry is held") { c.recorder.heldModeCount == 1 }
 
     stream.scriptStops([.stall])
@@ -138,7 +138,7 @@ import Testing
     #expect(c.status(0)?.waitingForIdentity == true)
     #expect(c.recorder.creations.count == 1)
 
-    #expect(c.backend.sleeps.release { $0 == .seconds(1) }, "the stop is retried after 1 s")
+    #expect(await c.releaseSleep(.seconds(1)), "the stop is retried after 1 s")
     await c.eventually("the replacement is made") { c.recorder.creations.count == 2 }
     #expect(c.status(0)?.stopUnconfirmed == false)
     #expect(stream.isConfirmedStopped)
@@ -192,7 +192,7 @@ import Testing
     #expect(c.status(0)?.problem == nil)
     #expect(stream.isConfirmedStopped)
 
-    #expect(c.backend.sleeps.release { $0 == .seconds(1) })
+    #expect(await c.releaseSleep(.seconds(1)))
     await c.eventually("the head restarts under the grant") { c.backend.startRequests == [0, 0] }
     await c.eventually("live again") { c.status(0)?.captureRunning == true }
 }
@@ -210,7 +210,7 @@ import Testing
     #expect(c.status(0)?.display == nil)
     #expect(c.status(0)?.problem == "CGVirtualDisplay refused")
 
-    #expect(c.backend.sleeps.release { $0 == .seconds(1) })
+    #expect(await c.releaseSleep(.seconds(1)))
     await c.eventually("the retry creates the display") { c.recorder.creations.count == 1 }
     await c.eventually("the head starts") { c.backend.startRequests == [0] }
     #expect(c.recorder.creationAttempts == 2, "one retry, not one per event")

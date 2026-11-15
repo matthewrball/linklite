@@ -53,7 +53,7 @@ import Testing
     await c.eventually("the start has a deadline") {
         c.backend.sleeps.pending.contains(HeadTiming.captureOperationTimeout)
     }
-    #expect(c.backend.sleeps.release { $0 == HeadTiming.captureOperationTimeout })
+    #expect(await c.releaseSleep(HeadTiming.captureOperationTimeout))
     await c.eventually("the head reports the hung start") { c.status(0)?.problem?.contains("did not start") == true }
     #expect(c.status(0)?.captureAttempt == nil, "the given-up start no longer holds the head")
 
@@ -95,13 +95,13 @@ import Testing
     await c.eventually("the stop has a deadline") {
         c.backend.sleeps.pending.contains(HeadTiming.captureOperationTimeout)
     }
-    #expect(c.backend.sleeps.release { $0 == HeadTiming.captureOperationTimeout })
+    #expect(await c.releaseSleep(HeadTiming.captureOperationTimeout))
     await c.eventually("the hung stop is shown as unconfirmed") { c.status(0)?.stopUnconfirmed == true }
     #expect(c.recorder.creations.count == 1, "nothing is made while the old stream may still run")
     #expect(stream.deliverFrame() == false)
 
     await c.eventually("the stop is retried after 1 s") { c.backend.sleeps.pending.contains(.seconds(1)) }
-    #expect(c.backend.sleeps.release { $0 == .seconds(1) })
+    #expect(await c.releaseSleep(.seconds(1)))
     await c.eventually("the replacement is made once the stop is confirmed") { c.recorder.creations.count == 2 }
     #expect(!c.runtime.hasUnconfirmedStops)
     #expect(c.status(0)?.stopUnconfirmed == false)

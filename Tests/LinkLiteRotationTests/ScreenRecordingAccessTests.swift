@@ -202,7 +202,7 @@ private final class ReportLog {
     #expect(first.isConfirmedStopped, "the old stream is confirmed stopped")
 
     await c.eventually("the retry is due") { c.backend.sleeps.pending.contains(.seconds(1)) }
-    #expect(c.backend.sleeps.release { $0 == .seconds(1) })
+    #expect(await c.releaseSleep(.seconds(1)))
     await c.eventually("the head restarts under the grant") { c.backend.startRequests == [0, 0] }
     let second = try c.stream(1)
     second.deliverFrame()
@@ -286,7 +286,7 @@ private final class ReportLog {
 
     c.backend.failNextStart(FakeError.screenRecordingDenied)                // the retry is refused: a current denial
     await c.eventually("the retry is due") { c.backend.sleeps.pending.contains(.seconds(1)) }
-    #expect(c.backend.sleeps.release { $0 == .seconds(1) })
+    #expect(await c.releaseSleep(.seconds(1)))
     await c.eventually("the refused start blocks") { c.runtime.controller.permissionDenied }
     #expect(c.status(0)?.problem == "Screen Recording permission is required")
     #expect(c.backend.startRequests == [0, 0])

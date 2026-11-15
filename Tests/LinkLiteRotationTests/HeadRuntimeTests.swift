@@ -142,18 +142,18 @@ import Testing
     #expect(!stream.isConfirmedStopped, "a failed stop does not count as stopped")
 
     // No monitor comes back. The retry fails again, then succeeds after 2 s.
-    #expect(c.backend.sleeps.release { $0 == .seconds(1) })
+    #expect(await c.releaseSleep(.seconds(1)))
     await c.eventually("the second retry is due after 2 s") { c.backend.sleeps.pending.contains(.seconds(2)) }
     #expect(c.runtime.hasUnconfirmedStops)
     #expect(c.recorder.creations.count == 1, "no new display while the old stream is unconfirmed")
 
-    #expect(c.backend.sleeps.release { $0 == .seconds(2) })
+    #expect(await c.releaseSleep(.seconds(2)))
     await c.eventually("the stop is confirmed") { !c.runtime.hasUnconfirmedStops }
     #expect(stream.isConfirmedStopped)
     #expect(c.backend.startRequests == [0], "no start was attempted on the head while its stop was unconfirmed")
 
     // The reconnect grace ends with nobody back: the display is released now that its streams are stopped.
-    #expect(c.backend.sleeps.release { $0 == .seconds(20) })
+    #expect(await c.releaseSleep(.seconds(20)))
     await c.eventually("the display is released") { !c.recorder.isAlive(creation: 0) }
 
     // Recovery: the monitor comes back and a new display and stream are made.
@@ -268,8 +268,7 @@ import Testing
     stream.deliverFrame()
     await c.eventually("live") { c.status(0)?.hasUsableFrame == true }
 
-    await c.eventually("the mode retry is due") { c.backend.sleeps.pending.contains(.seconds(1)) }
-    #expect(c.backend.sleeps.release { $0 == .seconds(1) }, "the mode retry is due after 1 s")
+    #expect(await c.releaseSleep(.seconds(1)), "the mode retry is due after 1 s")
     await c.eventually("the mode is tried again") { c.recorder.modeCalls == 2 }
     await c.settle()
     #expect(stream.stopAttempts == 0, "a mode retry must not stop the capture")

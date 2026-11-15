@@ -388,6 +388,14 @@ final class ComposedHeads {
         Issue.record("never reached: \(message)")
     }
 
+    /// Releases one pending platform sleep of `duration` once it is waiting. Timers are scheduled on their own tasks,
+    /// so releasing at once could race the sleep being started. Returns whether one was released.
+    @discardableResult
+    func releaseSleep(_ duration: Duration) async -> Bool {
+        await eventually("a \(duration) sleep is pending") { backend.sleeps.pending.contains(duration) }
+        return backend.sleeps.release { $0 == duration }
+    }
+
     /// The nth display the platform made. Fails the test, rather than crashing it, if there is none.
     func madeDisplay(_ index: Int) throws -> (head: UInt8, orientation: DisplayOrientation, identity: DisplayIdentity) {
         try #require(recorder.creations.indices.contains(index), "display \(index) was never made")
