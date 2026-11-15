@@ -1521,7 +1521,7 @@ mod production_builders {
         assert_eq!(ridge.connectors(), 2);
         assert_eq!(navarro.connectors(), 4);
 
-        assert_eq!(ridge.dock_buffers(), 3); // local displaylink-lite patch; see profile.rs
+        assert_eq!(ridge.dock_buffers(), 3); // local LinkLite patch; see profile.rs
         assert_eq!(navarro.dock_buffers(), 3);
 
         // Ella carries pixels on the control pipe; the others have a video endpoint of their own.

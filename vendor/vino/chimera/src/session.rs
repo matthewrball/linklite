@@ -57,7 +57,7 @@ struct SessionKeys {
 }
 
 /// Where the most recent [`ControlSession::present_rgb_dirty`] spent its time. Local
-/// displaylink-lite patch for performance counters; it only reads the clock around existing calls.
+/// LinkLite patch for performance counters; it only reads the clock around existing calls.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PresentTiming {
     /// Hashing and selecting strips (`HeadScanout::plan_dirty`).
@@ -113,7 +113,7 @@ pub struct ControlSession {
     /// taken the cursor out of band, nothing draws one into the frame either.
     cursor_shot: [Option<CursorShot>; MAX_CONNECTORS],
     /// Set when the dock pushes `id=0x03 sub=0x82`, its "downstream state changed" notice, which
-    /// is the whole of DLM's runtime hotplug policy on Ridge (docs/ridge.md). Local displaylink-lite
+    /// is the whole of DLM's runtime hotplug policy on Ridge (docs/ridge.md). Local LinkLite
     /// patch; see vendor/vino/UPSTREAM.md.
     downstream_changed: bool,
     /// See [`ControlSession::last_present`].
@@ -573,7 +573,7 @@ impl ControlSession {
     ///
     /// A still desktop puts nothing on the wire at all, which is what DLM does and what the dock's
     /// buffer rotation assumes; see [`crate::scanout`]. Returns the video bytes submitted, so the
-    /// caller can hold the stream within what the dock can absorb (local displaylink-lite patch).
+    /// caller can hold the stream within what the dock can absorb (local LinkLite patch).
     pub fn present_rgb(
         &mut self,
         head: u8,

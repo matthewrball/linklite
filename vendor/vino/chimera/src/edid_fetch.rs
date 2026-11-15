@@ -93,7 +93,7 @@ fn drain_once(
 }
 
 /// PNP id `NVT` (NOVATEK), the manufacturer of the EDID a Ridge dock synthesises for itself before
-/// its downstream read completes (docs/ridge.md). Local displaylink-lite patch.
+/// its downstream read completes (docs/ridge.md). Local LinkLite patch.
 const DOCK_PLACEHOLDER_PNP: u16 = (14 << 10) | (22 << 5) | 20;
 
 /// Whether `edid` is the dock's own placeholder block rather than a monitor's.
@@ -125,7 +125,7 @@ pub fn fetch_edid(
     // the engage below produce the real one. A dock that never sets the bit answers correctly
     // anyway, and gating it discards every block.
     //
-    // Local displaylink-lite patch (see vendor/vino/UPSTREAM.md): a Humanscale M/Connect 2 on
+    // Local LinkLite patch (see vendor/vino/UPSTREAM.md): a Humanscale M/Connect 2 on
     // Ridge firmware 12.2.25 never sets the bit, yet offers each monitor's real EDID. Only the
     // dock's own placeholder is discarded, so a genuine monitor EDID is kept either way.
     let gate_on_ready = profile.edid_ready_reported();

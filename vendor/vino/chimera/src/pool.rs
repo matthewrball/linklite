@@ -1,4 +1,4 @@
-//! A persistent worker pool for data-parallel passes over borrowed data. Local displaylink-lite
+//! A persistent worker pool for data-parallel passes over borrowed data. Local LinkLite
 //! patch; see vendor/vino/UPSTREAM.md.
 //!
 //! Full-screen motion runs several such passes per frame (capture conversion, strip hashing,
