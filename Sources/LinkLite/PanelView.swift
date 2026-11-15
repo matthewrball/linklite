@@ -91,7 +91,7 @@ struct PanelView: View {
             footer
         }
         .padding(14)
-        .frame(width: 320)
+        .frame(width: 336)
         .overlay(alignment: .bottomTrailing) {
             Button {
                 withAnimation(disclosureAnimation) {
@@ -377,7 +377,9 @@ private struct MonitorCard: View {
                     .foregroundStyle(monitor.problem == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
                     .lineLimit(1)
             }
-            Spacer(minLength: 0)
+            // Fills the row itself rather than leaning on a Spacer: the menu and pill stay pinned
+            // right and aligned across cards, and the detail line keeps the gap a Spacer would eat.
+            .frame(maxWidth: .infinity, alignment: .leading)
             RotationMenu(monitorName: monitor.name, orientation: monitor.orientation, choose: setOrientation)
             if monitor.waiting {
                 Text("Waiting")
