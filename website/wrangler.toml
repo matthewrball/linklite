@@ -1,0 +1,3 @@
+name = "linklite-website"
+pages_build_output_dir = "."
+compatibility_date = "2026-11-14"
