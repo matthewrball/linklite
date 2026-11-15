@@ -79,6 +79,7 @@
   .nav .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 650; letter-spacing: -.03em; }
   .nav .brand img { width: 30px; height: 30px; border-radius: 8px; }
   .nav .brand .wordmark { color: var(--cream); }
+  .wordmark { font-weight: 400; letter-spacing: -.052em; }
   .nav nav { display: flex; gap: 22px; align-items: center; }
   .nav nav a { color: var(--faint); text-decoration: none; font-size: 14px; }
   .nav .dl { min-height: 34px; padding: 0 14px; font-size: 13px; }
@@ -188,14 +189,9 @@
   .install-heading { display: flex; align-items: center; gap: 18px; min-width: 0; }
   .install-icon { width: 58px; height: 58px; flex: none; border-radius: 14px; box-shadow: 0 14px 28px rgba(0,0,0,.24); }
   .install-heading h2 { max-width: none; margin: 0; font-size: clamp(32px,4.4vw,54px); line-height: 1.08; letter-spacing: -.045em; }
+  .install-heading .wordmark span { color: var(--mint); }
   .install-meta { margin: 9px 0 0; color: var(--sub); font-size: 14px; line-height: 1.5; }
   .install-download { justify-self: end; min-height: 52px; white-space: nowrap; }
-  .install-details { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px 24px; padding-top: 20px; border-top: 1px solid var(--line); }
-  .install-note { margin: 0; color: var(--sub); font-size: 13px; line-height: 1.6; }
-  .checksum { max-width: 100%; color: var(--faint); font-size: 12px; }
-  .checksum summary { cursor: pointer; color: var(--sub); }
-  .checksum summary:hover { color: var(--cream); }
-  .checksum code { display: block; margin-top: 12px; overflow-wrap: anywhere; color: var(--faint); font-size: 11px; line-height: 1.6; }
   @media (min-width: 761px) and (max-width: 1100px) {
     .fact-grid { grid-template-columns: 1fr; gap: 0; }
     .fact + .fact { border-left: 0; border-top: 1px solid rgba(167,158,140,.14); }
@@ -248,7 +244,6 @@
     .install-icon { width: 48px; height: 48px; }
     .install-heading h2 { font-size: clamp(30px,8.2vw,42px); }
     .install-section .dl { justify-self: start; }
-    .install-details { gap: 12px; }
 
   }
   @media (max-width: 760px) and (max-height: 700px) {
@@ -370,10 +365,9 @@
     <section class="page-section install-section" id="install" aria-labelledby="install-title">
       <div class="install-heading">
         <img class="install-icon" src="assets/logo.png" width="256" height="256" alt="" aria-hidden="true">
-        <div><h2 id="install-title">Download LinkLite</h2><p class="install-meta">macOS 14 or later · Apple silicon · v0.3.17 beta</p></div>
+        <div><h2 id="install-title">Download <span class="wordmark">Link<span>Lite</span></span></h2><p class="install-meta">macOS 14 or later · Apple silicon · v0.3.17 beta</p></div>
       </div>
       <a class="dl install-download" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download for macOS</a>
-      <div class="install-details"><p class="install-note">Quit DisplayLink Manager before opening LinkLite.</p><details class="checksum"><summary>SHA-256 checksum</summary><code>ac13da97917aaf344c6cbc36414e3f77cb4e6c71d45b22374b0e21a9d7974548</code></details></div>
     </section>
     <section class="biblio" aria-label="Site information">
       <div class="wrap">

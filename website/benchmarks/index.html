@@ -46,6 +46,7 @@
   .site-nav .brand { display: inline-flex; align-items: center; }
   .site-nav .brand img { width: 30px; height: 30px; margin-inline-end: 10px; border-radius: 8px; }
   .brand .wordmark { color: var(--cream); white-space: nowrap; }
+  .wordmark { font-weight: 400; letter-spacing: -.052em; }
   .brand span { color: var(--mint); }
   .site-links { display: flex; align-items: center; gap: 26px; }
   .site-links > a:not(.dl) { display: inline-flex; align-items: center; min-height: 40px; color: var(--faint); font-size: 14px; text-decoration: none; }
@@ -207,6 +208,7 @@
   .install { position: relative; overflow: hidden; background: radial-gradient(ellipse at 80% 60%,rgba(85,181,143,.14),transparent 38%),var(--navy-deep); }
   .install-inner { display: grid; grid-template-columns: 1fr auto; gap: 48px; align-items: end; padding-block: 104px; }
   .install h2 { max-width: 13ch; margin: 0; font-size: clamp(42px,5.4vw,70px); font-weight: 630; letter-spacing: -.05em; line-height: 1; text-wrap: balance; }
+  .install .wordmark span { color: var(--mint); }
   .install p { max-width: 36rem; margin: 22px 0 0; color: var(--sub); font-size: 16px; line-height: 1.6; }
   .install-actions { display: grid; justify-items: center; gap: 12px; }
   .install-actions .dl { min-height: 52px; padding-inline: 24px; white-space: nowrap; }
@@ -621,7 +623,7 @@
 
   <section class="install" aria-labelledby="install-title">
     <div class="shell install-inner">
-      <div><h2 id="install-title">Download LinkLite v0.3.17</h2><p>Apple silicon · macOS 14 or later · open-source beta. Quit DisplayLink Manager before opening LinkLite.</p></div>
+      <div><h2 id="install-title">Download <span class="wordmark">Link<span>Lite</span></span> v0.3.17</h2><p>Apple silicon · macOS 14 or later · open-source beta. Quit DisplayLink Manager before opening LinkLite.</p></div>
       <div class="install-actions"><a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download for macOS v0.3.17</a></div>
     </div>
   </section>
