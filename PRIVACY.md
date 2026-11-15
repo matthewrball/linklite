@@ -55,6 +55,16 @@ defaults delete com.ball.linklite
 
 Builds released as "DisplayLink Lite" (0.1.0) used the domain `com.ball.displaylink-lite` instead. To withdraw the Screen Recording permission, remove LinkLite in System Settings › Privacy & Security › Screen & System Audio Recording.
 
+## Website waitlist and donations
+
+_Last updated: November 14, 2026._
+
+The optional LinkLite waitlist collects the email address you submit and the website page or campaign source associated with the form. Cloudflare processes the form and waitlist database, and verifies requests with Turnstile. Rate limiting uses a keyed hash of your IP address; the waitlist itself stores your email and source. Resend processes the address when sending waitlist email and notifications. These services handle data under their own privacy terms.
+
+The waitlist is used for LinkLite updates, not advertising or selling personal information. You can request removal of your address using the private contact route below.
+
+For a Bitcoin or Lightning donation, your browser contacts Strike to obtain payment details. Opening a wallet hands the request to Cash App or BlueWallet. Those providers and your wallet handle the payment; LinkLite does not collect your wallet credentials or financial account information.
+
 ## Changes and contact
 
 Material changes to data handling will be documented here before release. Questions can be opened as an issue on [GitHub](https://github.com/matthewrball/linklite). Sensitive privacy concerns can use GitHub's private vulnerability reporting under the repository's Security tab.

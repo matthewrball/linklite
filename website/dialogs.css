@@ -1,0 +1,929 @@
+.linklite-icon-library {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.linklite-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.linklite-donate,
+.linklite-signup,
+.linklite-nojs-donate {
+  --linklite-text: #f3ecdb;
+  --linklite-muted: #c3cbec;
+  --linklite-faint: rgba(195, 203, 236, .64);
+  --linklite-navy: #0b1028;
+  --linklite-deep: #050815;
+  --linklite-mint: #8fdcb8;
+  --linklite-line: rgba(243, 236, 219, .14);
+  --linklite-glass: rgba(243, 236, 219, .07);
+  --linklite-ease: cubic-bezier(.32, .72, 0, 1);
+  --linklite-font: -apple-system, "SF Pro Text", "SF Pro Display", BlinkMacSystemFont, system-ui, sans-serif;
+  box-sizing: border-box;
+  color: var(--linklite-text);
+  font-family: var(--linklite-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.linklite-donate *,
+.linklite-signup *,
+.linklite-nojs-donate * {
+  box-sizing: border-box;
+}
+
+.linklite-donate button,
+.linklite-signup button,
+.linklite-donate input,
+.linklite-signup input {
+  font: inherit;
+}
+
+.linklite-donate button,
+.linklite-signup button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.linklite-donate :focus-visible,
+.linklite-signup :focus-visible,
+.linklite-nojs-donate :focus-visible {
+  outline: 2px solid var(--linklite-mint);
+  outline-offset: 3px;
+}
+
+.linklite-donate {
+  position: fixed;
+  inset: auto 0 max(18px, env(safe-area-inset-bottom));
+  width: min(440px, calc(100vw - 32px));
+  max-width: none;
+  max-inline-size: none;
+  max-height: calc(100dvh - 36px);
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+  --linklite-backdrop-opacity: 0;
+}
+
+.linklite-donate:not([open]) {
+  display: none;
+}
+
+.linklite-donate:focus {
+  outline: none;
+}
+
+.linklite-donate::backdrop {
+  background: rgba(2, 5, 16, .70);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  opacity: var(--linklite-backdrop-opacity);
+  transition: opacity 500ms var(--linklite-ease);
+}
+
+.linklite-donate.linklite-is-shown {
+  --linklite-backdrop-opacity: 1;
+}
+
+.linklite-donate.linklite-is-closing {
+  --linklite-backdrop-opacity: 0;
+}
+
+.linklite-donate-sheet {
+  position: relative;
+  max-height: min(78dvh, 560px);
+  padding: 34px 28px 28px;
+  border-radius: 32px;
+  overflow: visible;
+  color: var(--linklite-text);
+  background: linear-gradient(150deg, rgba(17, 25, 52, .985), rgba(5, 8, 21, .995));
+  box-shadow: inset 0 1px rgba(255, 255, 255, .11), inset 0 0 0 1px rgba(243, 236, 219, .10), 0 24px 80px rgba(0, 0, 0, .58);
+  -webkit-backdrop-filter: blur(30px) saturate(160%);
+  backdrop-filter: blur(30px) saturate(160%);
+  transform: translate3d(0, calc(100% + 24px), 0);
+  transition: transform 500ms var(--linklite-ease);
+}
+
+.linklite-donate.linklite-is-shown .linklite-donate-sheet {
+  transform: translate3d(0, 0, 0);
+}
+
+.linklite-donate.linklite-is-closing .linklite-donate-sheet {
+  transform: translate3d(0, calc(100% + 24px), 0);
+}
+
+.linklite-donate-base {
+  transform-origin: 50% 100%;
+  transition: opacity 260ms var(--linklite-ease), transform 260ms var(--linklite-ease), filter 260ms var(--linklite-ease);
+}
+
+.linklite-donate-sheet.linklite-is-bitcoin-open > .linklite-donate-base {
+  opacity: .54;
+  transform: translate3d(0, -10px, 0) scale(.965);
+  filter: blur(1px);
+  pointer-events: none;
+}
+
+.linklite-donate-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.35rem;
+  padding-bottom: 1.35rem;
+  border-bottom: 1px solid var(--linklite-line);
+}
+
+.linklite-donate-title {
+  margin: 0;
+  color: var(--linklite-text);
+  font: 650 28px/1.1 var(--linklite-font);
+  letter-spacing: -.025em;
+}
+
+.linklite-donate-close,
+.linklite-bitcoin-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0 0 3px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--linklite-muted);
+  background: var(--linklite-glass);
+  box-shadow: inset 0 0 0 1px var(--linklite-line);
+  font-size: 32px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.linklite-donate-close:hover,
+.linklite-bitcoin-close:hover {
+  color: var(--linklite-text);
+  background: rgba(243, 236, 219, .13);
+}
+
+.linklite-donate-copy {
+  margin: -.8rem 0 1.35rem;
+  color: var(--linklite-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.linklite-donate-options {
+  display: grid;
+  gap: .75rem;
+}
+
+.linklite-donate-option {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: .85rem;
+  align-items: center;
+  width: 100%;
+  min-height: 68px;
+  padding: 13px 20px;
+  border: 0;
+  border-radius: 18px;
+  color: var(--linklite-text);
+  background: var(--linklite-glass);
+  box-shadow: inset 0 0 0 1px var(--linklite-line), inset 0 1px rgba(255, 255, 255, .07);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.linklite-donate-option:hover {
+  background: rgba(243, 236, 219, .11);
+  box-shadow: inset 0 0 0 1px rgba(143, 220, 184, .32), inset 0 1px rgba(255, 255, 255, .08);
+  transform: translateY(-1px);
+}
+
+.linklite-donate-option:active {
+  transform: translateY(0);
+}
+
+.linklite-donate-option b {
+  display: block;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.linklite-donate-option em {
+  display: block;
+  margin-top: .2rem;
+  color: var(--linklite-muted);
+  font-size: 12.5px;
+  font-style: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.linklite-donate-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  font-size: 20px;
+  font-weight: 750;
+}
+
+.linklite-donate-cash {
+  color: #07150c;
+  background: #00d632;
+}
+
+.linklite-donate-bitcoin {
+  color: #f7931a;
+  background: transparent;
+}
+
+.linklite-donate-note {
+  margin: 1rem 0 0;
+  color: var(--linklite-faint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.linklite-bitcoin-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  border-radius: 32px;
+  background: rgba(0, 0, 0, .30);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 240ms var(--linklite-ease);
+}
+
+.linklite-donate-sheet.linklite-is-bitcoin-open .linklite-bitcoin-scrim {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.linklite-bitcoin-panel {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  max-height: min(82dvh, 520px);
+  padding: 24px 20px 20px;
+  border-radius: 28px;
+  color: var(--linklite-text);
+  background: linear-gradient(150deg, rgba(22, 32, 65, .995), rgba(7, 11, 28, .998));
+  box-shadow: inset 0 1px rgba(255, 255, 255, .10), inset 0 0 0 1px rgba(243, 236, 219, .13), 0 24px 80px rgba(0, 0, 0, .52);
+  overflow: hidden;
+  overscroll-behavior: contain;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate3d(0, 14px, 0) scale(.98);
+  filter: blur(4px);
+  transition: opacity 260ms var(--linklite-ease), transform 260ms var(--linklite-ease), filter 260ms var(--linklite-ease), visibility 0s linear 260ms;
+}
+
+.linklite-bitcoin-panel.linklite-is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0) scale(1);
+  filter: blur(0);
+  transition: opacity 260ms var(--linklite-ease), transform 260ms var(--linklite-ease), filter 260ms var(--linklite-ease);
+}
+
+.linklite-bitcoin-base {
+  transition: opacity 240ms var(--linklite-ease), transform 240ms var(--linklite-ease), filter 240ms var(--linklite-ease);
+}
+
+.linklite-bitcoin-panel.linklite-is-cashapp-open > .linklite-bitcoin-base {
+  opacity: .48;
+  transform: translate3d(0, -8px, 0) scale(.97);
+  filter: blur(1px);
+  pointer-events: none;
+}
+
+.linklite-bitcoin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.linklite-bitcoin-eyebrow {
+  margin: 0 0 .25rem;
+  color: var(--linklite-mint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.linklite-bitcoin-title {
+  margin: 0;
+  color: var(--linklite-text);
+  font: 650 23px/1.1 var(--linklite-font);
+  letter-spacing: -.02em;
+}
+
+.linklite-bitcoin-close {
+  width: 44px;
+  height: 44px;
+}
+
+.linklite-bitcoin-address {
+  margin: 0 0 .9rem;
+  padding: 12px 14px;
+  border-radius: 16px;
+  color: var(--linklite-text);
+  background: var(--linklite-glass);
+  box-shadow: inset 0 0 0 1px var(--linklite-line);
+}
+
+.linklite-bitcoin-address > b {
+  display: block;
+  margin-bottom: .4rem;
+  color: var(--linklite-muted);
+  font-size: 13px;
+}
+
+.linklite-bitcoin-address-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+
+.linklite-bitcoin-address code {
+  flex: 1;
+  min-width: 0;
+  font: 13px/1.45 var(--linklite-font);
+  overflow-wrap: anywhere;
+}
+
+.linklite-bitcoin-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 68px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--linklite-text);
+  background: rgba(243, 236, 219, .09);
+  box-shadow: inset 0 0 0 1px var(--linklite-line);
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.linklite-bitcoin-copy:hover {
+  background: rgba(243, 236, 219, .14);
+}
+
+.linklite-bitcoin-actions {
+  display: grid;
+  gap: .65rem;
+}
+
+.linklite-bitcoin-action {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: .7rem;
+  align-items: center;
+  width: 100%;
+  min-height: 58px;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 16px;
+  color: var(--linklite-text);
+  background: var(--linklite-glass);
+  box-shadow: inset 0 0 0 1px var(--linklite-line);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 140ms ease, background 140ms ease;
+}
+
+.linklite-bitcoin-action:hover {
+  transform: translateY(-1px);
+  background: rgba(243, 236, 219, .11);
+}
+
+.linklite-bitcoin-action:active {
+  transform: translateY(0);
+}
+
+.linklite-bitcoin-action i,
+.linklite-cashapp-pay-head i {
+  display: grid;
+  place-items: center;
+  font-style: normal;
+}
+
+.linklite-payment-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+
+.linklite-bitcoin-action b {
+  display: block;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.linklite-bitcoin-action em {
+  display: block;
+  margin-top: .22rem;
+  color: var(--linklite-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.linklite-cashapp-panel {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  max-height: calc(100% - 24px);
+  padding: 20px 14px 14px;
+  border-radius: 24px;
+  color: var(--linklite-text);
+  background: linear-gradient(150deg, rgba(27, 38, 76, .998), rgba(7, 11, 28, .998));
+  box-shadow: inset 0 1px rgba(255, 255, 255, .10), inset 0 0 0 1px rgba(243, 236, 219, .13), 0 18px 58px rgba(0, 0, 0, .48);
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate3d(0, 12px, 0) scale(.98);
+  filter: blur(4px);
+  transition: opacity 240ms var(--linklite-ease), transform 240ms var(--linklite-ease), filter 240ms var(--linklite-ease), visibility 0s linear 240ms;
+}
+
+.linklite-cashapp-panel.linklite-is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0) scale(1);
+  filter: blur(0);
+  transition: opacity 240ms var(--linklite-ease), transform 240ms var(--linklite-ease), filter 240ms var(--linklite-ease);
+}
+
+.linklite-cashapp-panel[aria-busy="true"] {
+  box-shadow: inset 0 1px rgba(255, 255, 255, .10), inset 0 0 0 1px rgba(143, 220, 184, .28), 0 18px 58px rgba(0, 0, 0, .48);
+}
+
+.linklite-cashapp-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+
+.linklite-cashapp-pay-head {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: .65rem;
+  align-items: start;
+  min-width: 0;
+}
+
+.linklite-cashapp-pay-head h4 {
+  margin: 1px 0 0;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.linklite-cashapp-pay-head p {
+  margin: .28rem 0 0;
+  color: var(--linklite-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.linklite-cashapp-back {
+  flex: none;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--linklite-muted);
+  background: var(--linklite-glass);
+  box-shadow: inset 0 0 0 1px var(--linklite-line);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.linklite-cashapp-back:hover {
+  color: var(--linklite-text);
+  background: rgba(243, 236, 219, .13);
+}
+
+.linklite-cashapp-amounts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .5rem;
+}
+
+.linklite-cashapp-chip,
+.linklite-cashapp-custom button {
+  min-height: 44px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--linklite-text);
+  background: var(--linklite-glass);
+  box-shadow: inset 0 0 0 1px var(--linklite-line);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.linklite-cashapp-chip:hover,
+.linklite-cashapp-custom button:hover {
+  background: rgba(243, 236, 219, .14);
+  box-shadow: inset 0 0 0 1px rgba(143, 220, 184, .34);
+}
+
+.linklite-cashapp-chip.linklite-is-selected {
+  background: rgba(143, 220, 184, .18);
+  box-shadow: inset 0 0 0 1px rgba(143, 220, 184, .48);
+}
+
+.linklite-cashapp-chip:disabled,
+.linklite-cashapp-custom button:disabled,
+.linklite-cashapp-custom input:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.linklite-cashapp-custom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px;
+  gap: .5rem;
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.linklite-cashapp-custom input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 14px;
+  color: var(--linklite-text);
+  background: rgba(5, 8, 21, .60);
+  box-shadow: inset 0 0 0 1px var(--linklite-line);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.linklite-cashapp-custom input::placeholder {
+  color: var(--linklite-faint);
+}
+
+.linklite-cashapp-custom input::-webkit-outer-spin-button,
+.linklite-cashapp-custom input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.linklite-cashapp-custom input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.linklite-signup {
+  position: fixed;
+  z-index: 70;
+  right: 20px;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  width: min(440px, calc(100% - 40px));
+  padding: 16px;
+  border: 1px solid var(--linklite-line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .035), transparent 32%), rgba(11, 16, 40, .96);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .08), 0 18px 48px rgba(0, 0, 0, .46);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  backdrop-filter: blur(24px) saturate(150%);
+  transform-origin: bottom right;
+  animation: linklite-signup-in 480ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.linklite-signup[hidden] {
+  display: none;
+}
+
+.linklite-signup-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-right: 32px;
+}
+
+.linklite-signup-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(143, 220, 184, .24);
+  border-radius: 10px;
+  color: var(--linklite-mint);
+  background: rgba(143, 220, 184, .09);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .08);
+}
+
+.linklite-signup-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.linklite-signup h2 {
+  margin: 1px 0 0;
+  font: 650 15px/1.35 var(--linklite-font);
+  letter-spacing: -.01em;
+}
+
+.linklite-signup-heading p {
+  margin: 3px 0 0;
+  color: var(--linklite-faint);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.linklite-signup-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.linklite-signup-form[hidden] {
+  display: none;
+}
+
+.linklite-signup-challenge {
+  flex: 1 0 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.linklite-signup-challenge:empty {
+  display: none;
+}
+
+.linklite-signup-form input[type="email"] {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--linklite-line);
+  border-radius: 10px;
+  color: var(--linklite-text);
+  background: rgba(243, 236, 219, .045);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .2);
+  font: 14px var(--linklite-font);
+  outline: none;
+}
+
+.linklite-signup-form input[type="email"]::placeholder {
+  color: var(--linklite-faint);
+}
+
+.linklite-signup-form input[type="email"]:focus {
+  border-color: rgba(143, 220, 184, .68);
+  box-shadow: 0 0 0 3px rgba(143, 220, 184, .13);
+}
+
+.linklite-signup-form input[type="email"][aria-invalid="true"] {
+  border-color: #f0a1a1;
+  box-shadow: 0 0 0 3px rgba(240, 161, 161, .13);
+}
+
+.linklite-signup-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 15px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #0b1028;
+  background: linear-gradient(180deg, #94dcb8, #55b58f);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .40), 0 8px 20px rgba(85, 181, 143, .18);
+  font: 650 13px var(--linklite-font);
+  cursor: pointer;
+}
+
+.linklite-signup-submit:hover {
+  box-shadow: inset 0 1px rgba(255, 255, 255, .48), 0 8px 22px rgba(85, 181, 143, .26);
+}
+
+.linklite-signup-submit:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.linklite-signup-honeypot {
+  position: absolute;
+  left: -10000px;
+}
+
+.linklite-signup-close {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--linklite-faint);
+  background: transparent;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.linklite-signup-close:hover {
+  border-color: var(--linklite-line);
+  color: var(--linklite-text);
+  background: rgba(243, 236, 219, .055);
+}
+
+.linklite-signup-close svg {
+  width: 15px;
+  height: 15px;
+}
+
+.linklite-signup-status:not(:empty) {
+  margin: 10px 0 0;
+  color: var(--linklite-text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.linklite-nojs-donate {
+  width: min(560px, calc(100% - 32px));
+  margin: 24px auto;
+  padding: 24px;
+  border: 1px solid var(--linklite-line);
+  border-radius: 20px;
+  background: var(--linklite-navy);
+  line-height: 1.55;
+}
+
+.linklite-nojs-donate h2 {
+  margin: 0 0 12px;
+  font-size: 24px;
+}
+
+.linklite-nojs-donate p {
+  margin: 10px 0 0;
+  color: var(--linklite-muted);
+}
+
+.linklite-nojs-donate a {
+  color: var(--linklite-mint);
+}
+
+.linklite-nojs-donate code {
+  overflow-wrap: anywhere;
+}
+
+@keyframes linklite-signup-in {
+  from { opacity: 0; transform: translateY(14px) scale(.985); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+
+@media (max-width: 640px) {
+  .linklite-signup {
+    right: 14px;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    width: calc(100% - 28px);
+  }
+
+  .linklite-signup-form {
+    flex-direction: column;
+  }
+
+  .linklite-signup-heading p {
+    white-space: normal;
+  }
+
+  .linklite-signup-form input[type="email"] {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 520px) {
+  .linklite-donate {
+    inset: auto 0 max(12px, env(safe-area-inset-bottom));
+    width: calc(100vw - 24px);
+  }
+
+  .linklite-donate-sheet {
+    padding: 26px 20px 22px;
+    border-radius: 28px;
+  }
+
+  .linklite-donate-title {
+    font-size: 26px;
+  }
+
+  .linklite-donate-option {
+    grid-template-columns: 30px minmax(0, 1fr);
+    padding-inline: 16px;
+  }
+
+  .linklite-bitcoin-panel {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    padding: 20px 14px 16px;
+    border-radius: 24px;
+  }
+
+  .linklite-bitcoin-address {
+    padding-inline: 11px;
+  }
+
+  .linklite-cashapp-panel {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+  }
+
+  .linklite-cashapp-top {
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .linklite-donate-sheet,
+  .linklite-bitcoin-panel,
+  .linklite-cashapp-panel,
+  .linklite-signup {
+    background: var(--linklite-navy);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .linklite-donate::backdrop {
+    background: rgba(2, 5, 16, .94);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .linklite-donate::backdrop,
+  .linklite-donate-sheet,
+  .linklite-donate-base,
+  .linklite-donate-option,
+  .linklite-bitcoin-scrim,
+  .linklite-bitcoin-panel,
+  .linklite-bitcoin-base,
+  .linklite-bitcoin-action,
+  .linklite-cashapp-panel {
+    transition-duration: 1ms !important;
+  }
+
+  .linklite-signup {
+    animation: none;
+  }
+}

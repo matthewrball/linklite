@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LinkLite benchmarks — 74% less memory</title>
+<meta name="description" content="LinkLite 0.2.0 versus DisplayLink Manager 16.1.25 with two 4K displays: memory, GPU, CPU, app bundle size, raw runs, and test setup.">
+<meta name="theme-color" content="#0b1028">
+<meta name="color-scheme" content="dark">
+<link rel="canonical" href="https://linklite.app/benchmarks/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="LinkLite">
+<meta property="og:title" content="LinkLite benchmarks — 74% less memory">
+<meta property="og:description" content="134 MB versus 513 MB of driver memory, 15% versus 33% whole-GPU busy under motion, and 338% versus 20% CPU.">
+<meta property="og:url" content="https://linklite.app/benchmarks/">
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+<style>
+  :root {
+    --section-space: clamp(64px, 7vw, 96px);
+    --navy: #0b1028;
+    --navy-deep: #050815;
+    --mint: #8fdcb8;
+    --mint-strong: #55b58f;
+    --cream: #f3ecdb;
+    --sub: #c3cbec;
+    --faint: rgba(195,203,236,.72);
+    --line: rgba(243,236,219,.13);
+    --ease: cubic-bezier(.23,1,.32,1);
+    --font: -apple-system, "SF Pro Text", "SF Pro Display", BlinkMacSystemFont, system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --focus: var(--mint);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; background: var(--navy-deep); }
+  body { margin: 0; overflow-x: clip; background: var(--navy); color: var(--cream); font-family: var(--font); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  a { color: inherit; font: inherit; text-underline-offset: .2em; text-decoration-thickness: from-font; }
+  a:focus-visible, summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; border-radius: 4px; }
+  section[id] { scroll-margin-top: 92px; }
+  ::selection { color: var(--navy); background: var(--mint); }
+  .skip-link { position: fixed; inset: 12px auto auto 12px; z-index: 100; padding: 12px 16px; border-radius: 8px; color: var(--navy); background: var(--cream); font-weight: 650; transform: translateY(-160%); }
+  .skip-link:focus { transform: translateY(0); }
+  .shell { width: min(1160px,calc(100% - 64px)); margin-inline: auto; }
+  .site-header { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid rgba(243,236,219,.09); background: rgba(5,8,21,.83); backdrop-filter: blur(18px); }
+  .site-nav { display: flex; align-items: center; justify-content: space-between; min-height: 68px; gap: 24px; padding-top: env(safe-area-inset-top); }
+  .brand { flex: none; color: var(--cream); font-size: 20px; font-weight: 680; letter-spacing: -.035em; text-decoration: none; }
+  .brand span { color: var(--mint); }
+  .site-links { display: flex; align-items: center; gap: 26px; }
+  .site-links > a:not(.dl) { display: inline-flex; align-items: center; min-height: 40px; color: var(--faint); font-size: 14px; text-decoration: none; }
+  .site-links > a:not(.dl):hover { color: var(--cream); }
+  .dl { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 0 20px; border-radius: 999px; color: #071b18; background: linear-gradient(180deg,#9be3c2,#63be9b); box-shadow: inset 0 1px 0 rgba(255,255,255,.46); font-size: 15px; font-weight: 650; text-decoration: none; }
+  .site-links .dl { min-height: 38px; padding-inline: 16px; font-size: 13px; }
+  .version-label { margin-inline-start: .35em; }
+  .text-link { color: var(--mint); font-weight: 570; }
+  .text-link span { margin-inline-start: .3em; }
+  .text-link:hover { color: var(--cream); }
+  .hero { position: relative; isolation: isolate; overflow: hidden; background: radial-gradient(ellipse at 76% 30%,rgba(85,181,143,.13),transparent 34%),radial-gradient(ellipse at 18% 10%,rgba(77,94,180,.14),transparent 38%),var(--navy-deep); }
+  .hero::after { content: ""; position: absolute; z-index: -1; inset: auto -10% -260px 35%; height: 460px; border: 1px solid rgba(143,220,184,.10); border-radius: 50%; transform: rotate(-8deg); box-shadow: 0 0 0 70px rgba(143,220,184,.025),0 0 0 140px rgba(143,220,184,.018); pointer-events: none; }
+  .hero-inner { padding-block: clamp(82px,10vw,142px) 88px; }
+  h1, h2, h3 { overflow-wrap: break-word; text-wrap: balance; }
+  p, dd, figcaption, caption, .big-label, .phase-list span, .metric-list dt, .limits li { overflow-wrap: break-word; text-wrap: pretty; }
+  h1 { max-width: 10.5ch; margin: 0; font-size: clamp(58px,8.3vw,112px); font-weight: 630; letter-spacing: -.062em; line-height: .94; text-wrap: balance; }
+  h1 em { color: var(--mint); font-style: normal; }
+  .hero-deck { display: grid; grid-template-columns: minmax(0,1fr) minmax(370px,.78fr); gap: clamp(48px,8vw,110px); align-items: end; margin-top: 62px; }
+  .hero-copy { max-width: 37rem; }
+  .hero-copy > p { margin: 0; color: var(--sub); font-size: 19px; line-height: 1.58; text-wrap: pretty; }
+  .hero-copy strong { color: var(--cream); font-weight: 600; }
+  .actions { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; margin-top: 30px; }
+  .actions .text-link { display: inline-flex; align-items: center; min-height: 44px; }
+  .scoreboard { margin: 0; border-top: 1px solid var(--line); }
+  .scoreboard > div { display: grid; grid-template-columns: max-content minmax(0,1fr); column-gap: 20px; align-items: baseline; padding-block: 18px; border-bottom: 1px solid var(--line); }
+  .scoreboard dt { color: var(--cream); font-size: 35px; font-weight: 630; letter-spacing: -.045em; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scoreboard dd { margin: 0; color: var(--sub); font-size: 14px; line-height: 1.45; }
+  .scoreboard .cost dt { color: var(--cream); font-size: 27px; letter-spacing: -.035em; }
+  .hero-meta { display: flex; flex-wrap: wrap; gap: 10px 26px; margin: 54px 0 0; padding-top: 22px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; line-height: 1.5; }
+  .hero-meta time { color: var(--cream); font-weight: 600; }
+  .section { padding-block: var(--section-space); }
+  .section-heading { display: grid; grid-template-columns: minmax(0,.8fr) minmax(0,1.2fr); gap: 64px; align-items: end; margin-bottom: 66px; }
+  .section-heading h2, .chapter-copy h2, .method-heading h2 { margin: 0; font-size: clamp(40px,5vw,68px); font-weight: 630; letter-spacing: -.048em; line-height: 1.01; text-wrap: balance; }
+  .chapter { display: grid; grid-template-columns: minmax(250px,.68fr) minmax(0,1.32fr); gap: clamp(42px,7vw,88px); align-items: center; padding-block: 66px; border-top: 1px solid var(--line); }
+  .chapter:first-of-type { border-top: 0; padding-top: 0; }
+  .chapter-copy h2 { max-width: 14ch; font-size: clamp(38px,4.3vw,59px); }
+  .big-number { display: block; margin-top: 30px; color: var(--mint); font-size: clamp(62px,7vw,96px); font-weight: 640; letter-spacing: -.065em; line-height: .9; font-variant-numeric: tabular-nums; }
+  .big-label { display: block; max-width: 22ch; margin-top: 12px; color: var(--cream); font-size: 15px; line-height: 1.45; }
+  .chart { min-width: 0; margin: 0; padding: clamp(26px,4vw,44px); border: 1px solid rgba(243,236,219,.13); border-radius: 22px; background: linear-gradient(145deg,rgba(28,38,72,.68),rgba(11,16,40,.45)); box-shadow: 0 26px 70px rgba(0,0,0,.17),inset 0 1px 0 rgba(255,255,255,.045); }
+  .chart-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-bottom: 32px; }
+  .chart-title { margin: 0; color: var(--cream); font-size: 14px; font-weight: 620; }
+  .guidance { display: inline-flex; align-items: center; gap: 7px; color: var(--faint); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+  .guidance::before { content: "↓"; color: var(--mint); font-size: 16px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 0 0 28px; padding: 0; list-style: none; color: var(--sub); font-size: 12px; }
+  .legend li { display: inline-flex; align-items: center; gap: 8px; }
+  .swatch { width: 9px; height: 9px; border-radius: 3px; background: var(--cream); }
+  .swatch.lite { background: var(--mint-strong); }
+  .swatch.driver { background: #8895c8; }
+  .swatch.compositor { background: var(--cream); }
+  .bar-group + .bar-group { margin-top: 27px; }
+  .bar-meta { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; margin-bottom: 10px; }
+  .bar-name { color: var(--sub); font-size: 14px; }
+  .bar-name strong { color: var(--cream); font-weight: 590; }
+  .bar-value { flex: none; color: var(--cream); font-size: 21px; font-weight: 630; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+  .track { height: 18px; overflow: hidden; border-radius: 5px; background: rgba(195,203,236,.08); }
+  .fill { display: block; width: var(--value); height: 100%; min-width: 2px; border-radius: inherit; background: var(--cream); }
+  .lite .fill { background: linear-gradient(90deg,var(--mint-strong),var(--mint)); }
+  .axis { display: flex; justify-content: space-between; margin-top: 10px; color: var(--faint); font-family: var(--mono); font-size: 10px; }
+  figcaption { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--faint); font-size: 13px; line-height: 1.58; }
+  .phase-readout { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-top: 26px; }
+  .phase-readout > div { padding-top: 16px; border-top: 1px solid var(--line); }
+  .phase-readout span { display: block; color: var(--faint); font-size: 11px; }
+  .phase-readout strong { display: block; margin-top: 6px; color: var(--cream); font-size: 14px; font-weight: 560; line-height: 1.45; font-variant-numeric: tabular-nums; }
+  .stack-row + .stack-row { margin-top: 25px; }
+  .stack-meta { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 10px; color: var(--sub); font-size: 13px; }
+  .stack-meta strong { color: var(--cream); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stack-track { display: flex; width: 100%; height: 25px; overflow: hidden; border-radius: 5px; background: rgba(195,203,236,.08); }
+  .stack-track span { display: block; height: 100%; }
+  .stack-driver { width: var(--driver); background: #8895c8; }
+  .stack-compositor { width: var(--compositor); background: var(--cream); }
+  .cpu-section { --focus: #176448; color: var(--navy); background: var(--cream); }
+  .cpu-section .chapter { border-color: rgba(11,16,40,.16); }
+  .cpu-section .big-label { color: #394156; }
+  .cpu-section .big-number { color: #173f38; }
+  .cpu-section .chart { border-color: rgba(11,16,40,.13); background: rgba(255,255,255,.29); box-shadow: none; }
+  .cpu-section .chart-title, .cpu-section .bar-value, .cpu-section .bar-name strong { color: var(--navy); }
+  .cpu-section .guidance, .cpu-section .bar-name, .cpu-section figcaption, .cpu-section .axis, .cpu-section .phase-readout span { color: #4f5668; }
+  .cpu-section .track { background: rgba(11,16,40,.08); }
+  .cpu-section .fill { background: #747c92; }
+  .cpu-section .lite .fill { background: #1d6652; }
+  .cpu-section .phase-readout > div, .cpu-section figcaption { border-color: rgba(11,16,40,.15); }
+  .cpu-section .phase-readout strong { color: var(--navy); }
+  .cpu-section .guidance::before { color: #1d6652; }
+  .noise-note { display: grid; grid-template-columns: 180px 1fr; gap: 34px; margin-top: 30px; padding-top: 28px; border-top: 1px solid var(--line); }
+  .noise-note h3 { margin: 0; color: var(--cream); font-size: 16px; line-height: 1.45; }
+  .noise-note p { max-width: 50rem; margin: 0; color: var(--sub); font-size: 14px; line-height: 1.65; }
+  .size-layout { display: grid; grid-template-columns: minmax(0,1.15fr) minmax(290px,.85fr); gap: clamp(48px,8vw,100px); align-items: center; }
+  .size-statement { margin: 0; font-size: clamp(45px,6.2vw,82px); font-weight: 620; letter-spacing: -.055em; line-height: 1.02; text-wrap: balance; }
+  .version-note { margin-top: 24px; padding-left: 17px; border-left: 2px solid var(--mint); color: var(--faint); font-size: 13px; line-height: 1.6; }
+  .raw-section { border-top: 1px solid var(--line); background: #080d22; }
+  .raw-heading { display: flex; justify-content: space-between; align-items: end; gap: 40px; margin-bottom: 38px; }
+  .raw-heading h2 { max-width: 15ch; margin: 0; font-size: clamp(36px,4.3vw,56px); font-weight: 630; letter-spacing: -.045em; line-height: 1.04; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; background: rgba(17,25,55,.45); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  caption { padding: 20px 22px; color: var(--sub); font-size: 13px; line-height: 1.5; text-align: left; }
+  th, td { padding: 16px 18px; border-top: 1px solid rgba(243,236,219,.09); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+  thead th { color: var(--faint); background: rgba(243,236,219,.025); font-size: 10px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; }
+  tbody th { color: var(--cream); font-weight: 620; }
+  tbody td { color: var(--sub); }
+  tbody tr[data-driver="lite"] th { color: var(--mint); }
+  .table-links { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 24px; font-size: 13px; }
+  .method { border-top: 1px solid var(--line); }
+  .method-heading { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: end; margin-bottom: 60px; }
+  .setup-grid { display: grid; grid-template-columns: .82fr 1.18fr; gap: 72px; }
+  .setup-grid h3, .sampling h3, .limits h3 { margin: 0 0 20px; font-size: 21px; font-weight: 620; letter-spacing: -.025em; }
+  .hardware-list { margin: 0; }
+  .hardware-list > div { display: grid; grid-template-columns: 100px 1fr; gap: 20px; padding-block: 17px; border-top: 1px solid var(--line); }
+  .hardware-list dt { color: var(--faint); font-size: 12px; }
+  .hardware-list dd { margin: 0; color: var(--sub); font-size: 14px; line-height: 1.58; }
+  .run-sequence { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; margin: 0 0 36px; padding: 0; list-style: none; }
+  .run-sequence li { position: relative; padding: 22px 18px 20px; border: 1px solid var(--line); background: rgba(195,203,236,.025); }
+  .run-sequence li + li { border-left: 0; }
+  .run-sequence li:first-child { border-radius: 12px 0 0 12px; }
+  .run-sequence li:last-child { border-radius: 0 12px 12px 0; }
+  .run-sequence span { display: block; color: var(--faint); font-family: var(--mono); font-size: 10px; }
+  .run-sequence strong { display: block; margin-top: 9px; color: var(--cream); font-size: 14px; line-height: 1.35; }
+  .run-sequence .lite strong { color: var(--mint); }
+  .phase-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+  .phase-list li { display: grid; grid-template-columns: 105px 1fr; gap: 20px; padding-block: 16px; border-top: 1px solid var(--line); }
+  .phase-list strong { color: var(--cream); font-size: 13px; font-weight: 600; }
+  .phase-list span { color: var(--sub); font-size: 13px; line-height: 1.58; }
+  .phase-list code { color: var(--mint); font-family: var(--mono); font-size: .92em; }
+  .sampling-details { margin-top: 64px; padding-top: 32px; border-top: 1px solid var(--line); }
+  .sampling-details summary { width: fit-content; cursor: pointer; color: var(--cream); font-size: 21px; font-weight: 620; letter-spacing: -.025em; }
+  .sampling { display: grid; grid-template-columns: .82fr 1.18fr; gap: 72px; margin-top: 36px; }
+  .sampling-intro p { margin: 0; color: var(--sub); font-size: 14px; line-height: 1.65; }
+  .metric-list { margin: 0; }
+  .metric-list > div { padding-block: 17px; border-top: 1px solid var(--line); }
+  .metric-list dt { color: var(--cream); font-size: 14px; font-weight: 570; }
+  .metric-list dd { margin: 7px 0 0; color: var(--faint); font-size: 13px; line-height: 1.58; }
+  .metric-list code { font-family: var(--mono); font-size: .9em; overflow-wrap: anywhere; }
+  .limits { display: grid; grid-template-columns: .82fr 1.18fr; gap: 72px; margin-top: 76px; padding: 40px; border: 1px solid rgba(143,220,184,.20); border-radius: 20px; background: rgba(85,181,143,.045); }
+  .pending { display: inline-flex; margin-top: 8px; padding: 7px 10px; border: 1px solid rgba(243,236,219,.16); border-radius: 999px; color: var(--cream); font-size: 11px; font-weight: 620; line-height: 1.3; }
+  .limits ul { margin: 0; padding: 0; list-style: none; }
+  .limits li { position: relative; padding: 0 0 18px 20px; color: var(--sub); font-size: 14px; line-height: 1.6; }
+  .limits li::before { content: ""; position: absolute; top: .65em; left: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--mint); }
+  .limits li:last-child { padding-bottom: 0; }
+  .limits strong { color: var(--cream); font-weight: 610; }
+  .component { border-top: 1px solid var(--line); background: var(--navy-deep); }
+  .component-heading { max-width: 48rem; }
+  .component-heading h2 { margin: 0; font-size: clamp(36px,4.3vw,56px); font-weight: 630; letter-spacing: -.045em; line-height: 1.05; }
+  .component-meta { margin: 18px 0 0; color: var(--faint); font-size: 13px; line-height: 1.5; }
+  .component-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0; margin-top: 48px; border-block: 1px solid var(--line); }
+  .component-item { padding: 32px 40px 34px 0; }
+  .component-item + .component-item { padding-left: 40px; border-left: 1px solid var(--line); }
+  .component-item h3 { margin: 0; color: var(--cream); font-size: 16px; line-height: 1.45; }
+  .component-values { display: flex; align-items: baseline; gap: 16px; margin-top: 22px; font-variant-numeric: tabular-nums; }
+  .component-values del { color: var(--faint); font-size: 25px; text-decoration-color: rgba(243,236,219,.35); }
+  .component-values strong { color: var(--mint); font-size: 38px; font-weight: 630; letter-spacing: -.04em; }
+  .component-values span { color: var(--faint); font-size: 12px; }
+  .component-item p { margin: 16px 0 0; color: var(--faint); font-size: 13px; line-height: 1.62; }
+  .capture { max-width: 58rem; margin: 44px 0 0; color: var(--faint); font-size: 13px; line-height: 1.65; }
+  .capture strong { color: var(--sub); font-weight: 600; }
+  .source-band { padding-block: 46px; border-block: 1px solid var(--line); background: #0d1531; }
+  .source-band .shell { display: flex; align-items: center; justify-content: space-between; gap: 30px; }
+  .source-band h2 { margin: 0; font-size: 23px; font-weight: 610; letter-spacing: -.025em; }
+  .source-band p { margin: 8px 0 0; color: var(--faint); font-size: 13px; line-height: 1.55; }
+  .source-band .text-link { flex: none; }
+  .install { position: relative; overflow: hidden; background: radial-gradient(ellipse at 80% 60%,rgba(85,181,143,.14),transparent 38%),var(--navy-deep); }
+  .install-inner { display: grid; grid-template-columns: 1fr auto; gap: 48px; align-items: end; padding-block: 104px; }
+  .install h2 { max-width: 13ch; margin: 0; font-size: clamp(42px,5.4vw,70px); font-weight: 630; letter-spacing: -.05em; line-height: 1; text-wrap: balance; }
+  .install p { max-width: 36rem; margin: 22px 0 0; color: var(--sub); font-size: 16px; line-height: 1.6; }
+  .install-actions { display: grid; justify-items: center; gap: 12px; }
+  .install-actions .dl { min-height: 52px; padding-inline: 24px; white-space: nowrap; }
+  .install-actions a:not(.dl) { color: var(--faint); font-size: 13px; }
+  .foot { padding: 32px max(32px,env(safe-area-inset-right)) max(28px,env(safe-area-inset-bottom)) max(32px,env(safe-area-inset-left)); border-top: 1px solid var(--line); background: var(--navy-deep); }
+  .foot-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px 32px; width: min(1160px,100%); margin-inline: auto; }
+  .foot .brand { font-size: 22px; }
+  .foot nav { display: flex; flex-wrap: wrap; gap: 10px 24px; }
+  .foot nav a { display: inline-flex; align-items: center; min-height: 36px; color: var(--faint); font-size: 13px; text-decoration: none; }
+  .foot nav a:hover { color: var(--cream); }
+  .disclaimer { flex-basis: 100%; display: flex; justify-content: space-between; gap: 14px 30px; margin: 6px 0 0; color: rgba(243,236,219,.52); font-size: 11px; line-height: 1.55; }
+  @media (hover: hover) and (pointer: fine) {
+    .dl { transition: transform 140ms var(--ease); }
+    .dl:hover { transform: translateY(-1px); }
+  }
+  .dl:active { transform: scale(.96); }
+  @media (prefers-reduced-motion: no-preference) {
+    .hero h1, .hero-deck, .hero-meta { animation: arrive 650ms var(--ease) both; }
+    .hero h1 { animation-delay: 70ms; }
+    .hero-deck { animation-delay: 140ms; }
+    .hero-meta { animation-delay: 210ms; }
+    @keyframes arrive { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  }
+  @media (max-width: 900px) {
+    .hero-deck, .section-heading, .chapter, .size-layout, .method-heading, .setup-grid, .sampling, .limits { grid-template-columns: 1fr; }
+    .hero-deck { gap: 46px; }
+    .hero-copy { max-width: 42rem; }
+    .scoreboard { max-width: 600px; }
+    .section-heading, .method-heading { gap: 26px; margin-bottom: 48px; }
+    .chapter { gap: 38px; padding-block: 58px; }
+    .chapter-copy h2 { max-width: 18ch; }
+    .big-label { max-width: 30ch; }
+    .size-layout { gap: 44px; }
+    .raw-heading { align-items: start; flex-direction: column; gap: 20px; }
+    .setup-grid, .sampling, .limits { gap: 38px; }
+    .sampling, .limits { margin-top: 56px; }
+    .limits { padding: 32px; }
+    .install-inner { grid-template-columns: 1fr; align-items: start; }
+    .install-actions { justify-items: start; }
+  }
+  @media (min-width: 901px) and (max-height: 850px) {
+    .hero-inner { padding-block: clamp(32px,5vh,64px) 32px; }
+    h1 { max-width: 16ch; font-size: clamp(56px,5.6vw,84px); line-height: .96; }
+    .hero-deck { gap: clamp(40px,6vw,88px); margin-top: 36px; }
+    .hero-copy > p { font-size: 18px; line-height: 1.5; }
+    .actions { margin-top: 22px; }
+    .scoreboard > div { padding-block: 12px; }
+    .scoreboard dt { font-size: 30px; }
+    .scoreboard .cost dt { font-size: 24px; }
+    .hero-meta { gap: 8px 20px; margin-top: 26px; padding-top: 16px; font-size: 11px; }
+  }
+  @media (min-width: 641px) and (max-width: 820px) {
+    .site-links > a[aria-current="page"] { display: none; }
+  }
+  @media (max-width: 640px) {
+    :root { --section-space: 56px; }
+    .shell { width: min(100% - 40px,1160px); }
+    .site-nav { min-height: 64px; gap: 16px; }
+    .site-links { gap: 16px; }
+    .site-links > a:not(.dl) { display: none; }
+    .site-links .dl { min-height: 44px; font-size: 14px; }
+    .hero-inner { padding-block: 70px 62px; }
+    h1 { font-size: clamp(51px,15vw,72px); line-height: .96; }
+    .hero-deck { margin-top: 42px; }
+    .hero-copy > p { font-size: 17px; }
+    .scoreboard > div { grid-template-columns: max-content minmax(0,1fr); column-gap: 16px; }
+    .scoreboard dt { font-size: 31px; }
+    .scoreboard .cost dt { font-size: 22px; }
+    .hero-meta { margin-top: 40px; }
+    .section { padding-block: var(--section-space); }
+    .section-heading h2, .method-heading h2 { font-size: 42px; }
+    .chapter-copy h2 { font-size: 39px; }
+    .chapter { padding-block: 48px; }
+    .chart { padding: 24px 20px; border-radius: 16px; }
+    .chart-top { margin-bottom: 25px; }
+    .bar-value { font-size: 18px; }
+    .bar-name { font-size: 13px; }
+    .phase-readout { grid-template-columns: 1fr; gap: 12px; }
+    .noise-note { grid-template-columns: 1fr; gap: 12px; }
+    .size-statement { font-size: 48px; }
+    .raw-heading h2, .component-heading h2 { font-size: 39px; }
+    .table-wrap { overflow: visible; border: 0; background: transparent; }
+    table, tbody { display: block; }
+    table { font-size: 13px; }
+    caption { display: block; padding: 0 0 22px; }
+    thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    tbody { display: grid; gap: 16px; }
+    tbody tr { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: rgba(17,25,55,.45); }
+    tbody th, tbody td { display: block; padding: 10px 0; border: 0; text-align: left !important; white-space: normal; }
+    tbody th { grid-column: 1; }
+    tbody td:nth-child(2) { grid-column: 2; align-self: center; text-align: right !important; color: var(--cream); }
+    tbody td::before { content: attr(data-label); display: block; margin-bottom: 5px; color: var(--faint); font-size: 9px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+    tbody td:nth-child(2)::before { text-align: right; }
+    .hardware-list > div { grid-template-columns: 80px 1fr; gap: 14px; }
+    .run-sequence { grid-template-columns: 1fr; }
+    .run-sequence li + li { border-left: 1px solid var(--line); border-top: 0; }
+    .run-sequence li:first-child { border-radius: 12px 12px 0 0; }
+    .run-sequence li:last-child { border-radius: 0 0 12px 12px; }
+    .phase-list li { grid-template-columns: 90px 1fr; gap: 14px; }
+    .limits { padding: 25px 22px; border-radius: 16px; }
+    .component-grid { grid-template-columns: 1fr; }
+    .component-item { padding: 28px 0; }
+    .component-item + .component-item { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
+    .source-band .shell { align-items: start; flex-direction: column; }
+    .install-inner { padding-block: 78px; }
+    .install h2 { font-size: 44px; }
+    .install-actions, .install-actions .dl { width: 100%; }
+    .install-actions a:not(.dl) { justify-self: center; }
+    .foot { padding-inline: max(20px,env(safe-area-inset-left)) max(20px,env(safe-area-inset-right)); }
+    .foot-inner { align-items: start; }
+    .foot nav { gap: 6px 20px; }
+    .disclaimer { flex-direction: column; }
+  }
+  @media (max-width: 380px) {
+    .shell { width: calc(100% - 32px); }
+    h1 { font-size: 49px; }
+    .limits li:last-child { max-width: 26ch; }
+    .component-meta { max-width: 30ch; }
+    .brand { font-size: 18px; }
+    .site-links .dl { padding-inline: 13px; font-size: 13px; }
+    .actions { align-items: stretch; flex-direction: column; }
+    .actions .dl { width: 100%; }
+    .actions .text-link { justify-content: center; }
+  }
+  @media (pointer: coarse) {
+    .site-links > a:not(.dl), .foot nav a { min-height: 44px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .dl:hover, .dl:active, .skip-link:focus { transform: none; }
+    .skip-link:focus { position: fixed; }
+  }
+  @media (forced-colors: active) {
+    .fill, .stack-track span { background: CanvasText; }
+    .lite .fill { background: Highlight; }
+    .track, .stack-track, .chart, .table-wrap, .limits { border: 1px solid CanvasText; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#content">Skip to benchmark results</a>
+<header class="site-header">
+  <div class="shell site-nav">
+    <a class="brand" href="/" aria-label="LinkLite home">Link<span>Lite</span></a>
+    <nav class="site-links" aria-label="Main navigation">
+      <a href="#results">Results</a>
+      <a href="#method">Method</a>
+      <a href="/benchmarks/" aria-current="page">Benchmarks</a>
+      <a href="https://github.com/matthewrball/linklite/blob/main/docs/BENCHMARK.md" rel="noopener" target="_blank">Source <span aria-hidden="true">↗</span></a>
+      <a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download <span class="version-label">v0.3.17</span></a>
+    </nav>
+  </div>
+</header>
+<main id="content">
+  <section class="hero" aria-labelledby="page-title">
+    <div class="shell hero-inner">
+      <h1 id="page-title"><em>74% less</em>&nbsp;memory</h1>
+      <div class="hero-deck">
+        <div class="hero-copy">
+          <p>LinkLite 0.2.0 vs DisplayLink Manager 16.1.25, tested with two 4K displays.</p>
+          <div class="actions">
+            <a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download for macOS v0.3.17</a>
+            <a class="text-link" href="#method">Inspect the method <span aria-hidden="true">↓</span></a>
+          </div>
+        </div>
+        <dl class="scoreboard" aria-label="Headline measurements">
+          <div><dt>134 MB</dt><dd>Mean memory · Manager: 513 MB</dd></div>
+          <div><dt>15%</dt><dd>Whole GPU under motion · Manager: 33%</dd></div>
+          <div class="cost"><dt>338% CPU</dt><dd>CPU under motion · Manager: 20%</dd></div>
+        </dl>
+      </div>
+      <p class="hero-meta"><span>Measured <time datetime="2026-11-03">3 November 2026</time></span><span>LinkLite 0.2.0 pre-release</span><span>DisplayLink Manager 16.1.25</span><span>macOS 26.6 · Apple M5 Pro · two 4K60 displays</span></p>
+    </div>
+  </section>
+
+  <section class="section" id="results" aria-labelledby="results-title">
+    <div class="shell">
+      <div class="section-heading"><h2 id="results-title">Runtime data</h2></div>
+
+      <article class="chapter" aria-labelledby="memory-title">
+        <div class="chapter-copy">
+          <h2 id="memory-title">Driver memory</h2>
+          <strong class="big-number">3.8×</strong>
+          <span class="big-label">less memory than DisplayLink Manager</span>
+        </div>
+        <figure class="chart" aria-labelledby="memory-chart-title">
+          <div class="chart-top"><h3 class="chart-title" id="memory-chart-title">Mean across desktop + animation</h3><span class="guidance">Lower is better</span></div>
+          <ul class="legend" aria-label="Chart legend"><li><span class="swatch lite" aria-hidden="true"></span>LinkLite 0.2.0</li><li><span class="swatch" aria-hidden="true"></span>DisplayLink Manager 16.1.25</li></ul>
+          <div class="bar-group lite">
+            <div class="bar-meta"><span class="bar-name"><strong>LinkLite</strong></span><span class="bar-value">134 MB</span></div>
+            <div class="track" aria-hidden="true"><span class="fill" style="--value:26.14%"></span></div>
+          </div>
+          <div class="bar-group">
+            <div class="bar-meta"><span class="bar-name"><strong>DisplayLink Manager</strong></span><span class="bar-value">513 MB</span></div>
+            <div class="track" aria-hidden="true"><span class="fill" style="--value:100%"></span></div>
+          </div>
+          <div class="axis" aria-hidden="true"><span>0 MB</span><span>513 MB</span></div>
+          <div class="phase-readout" aria-label="Memory by workload">
+            <div><span>Live desktop</span><strong>133 MB vs 512 MB</strong></div>
+            <div><span>60 fps animation</span><strong>135 MB vs 513 MB</strong></div>
+          </div>
+          <figcaption>LinkLite values are means of lite1 and lite2 across the 45-second desktop and animation phases.</figcaption>
+        </figure>
+      </article>
+
+      <article class="chapter" aria-labelledby="gpu-title">
+        <div class="chapter-copy">
+          <h2 id="gpu-title">Whole-GPU use during motion</h2>
+          <strong class="big-number">54%</strong>
+          <span class="big-label">lower whole-GPU use under motion</span>
+        </div>
+        <figure class="chart" aria-labelledby="gpu-chart-title">
+          <div class="chart-top"><h3 class="chart-title" id="gpu-chart-title">Whole-GPU busy · 60 fps animation</h3><span class="guidance">Lower is better</span></div>
+          <ul class="legend" aria-label="Chart legend"><li><span class="swatch lite" aria-hidden="true"></span>LinkLite 0.2.0</li><li><span class="swatch" aria-hidden="true"></span>DisplayLink Manager 16.1.25</li></ul>
+          <div class="bar-group lite">
+            <div class="bar-meta"><span class="bar-name"><strong>LinkLite</strong></span><span class="bar-value">15%</span></div>
+            <div class="track" aria-hidden="true"><span class="fill" style="--value:46.22%"></span></div>
+          </div>
+          <div class="bar-group">
+            <div class="bar-meta"><span class="bar-name"><strong>DisplayLink Manager</strong></span><span class="bar-value">33%</span></div>
+            <div class="track" aria-hidden="true"><span class="fill" style="--value:100%"></span></div>
+          </div>
+          <div class="axis" aria-hidden="true"><span>0%</span><span>33% busy</span></div>
+          <figcaption>Whole-GPU figures include other applications. Unrounded averages: 15.2308% and 32.9556%.</figcaption>
+        </figure>
+      </article>
+
+      <figure class="chart" aria-labelledby="gpu-time-title">
+        <div class="chart-top"><h3 class="chart-title" id="gpu-time-title">Driver and WindowServer GPU time · animation</h3><span class="guidance">Lower is better</span></div>
+        <ul class="legend" aria-label="Stacked chart legend"><li><span class="swatch driver" aria-hidden="true"></span>Driver process</li><li><span class="swatch compositor" aria-hidden="true"></span>WindowServer</li></ul>
+        <div class="stack-row lite">
+          <div class="stack-meta"><span>LinkLite total</span><strong>250 ms/s = 0 + 250</strong></div>
+          <div class="stack-track" role="img" aria-label="LinkLite: 0 milliseconds per second driver GPU time plus 250 milliseconds per second WindowServer GPU time" style="--driver:0%;--compositor:77.4%"><span class="stack-driver"></span><span class="stack-compositor"></span></div>
+        </div>
+        <div class="stack-row">
+          <div class="stack-meta"><span>DisplayLink Manager total</span><strong>323 ms/s = 168 + 155</strong></div>
+          <div class="stack-track" role="img" aria-label="DisplayLink Manager: 168 milliseconds per second driver GPU time plus 155 milliseconds per second WindowServer GPU time" style="--driver:52.01%;--compositor:47.99%"><span class="stack-driver"></span><span class="stack-compositor"></span></div>
+        </div>
+        <figcaption>Shared scale: 323 ms/s fills the track. “ms/s” is GPU milliseconds per second. WindowServer includes work from every app.</figcaption>
+      </figure>
+
+      <aside class="noise-note" aria-labelledby="noise-title">
+        <h3 id="noise-title">Desktop GPU background activity</h3>
+        <p>LinkLite’s second desktop phase measured 19.8%, versus 3.8% in its first. A 20-second check immediately afterward measured 4.3%. The desktop averages are 12% for LinkLite and 2% for Manager; whole-GPU and WindowServer figures include every app.</p>
+      </aside>
+      <p class="capture"><strong>Capture-path comparison · 3 November 2026 · LinkLite 0.2.0 · real hardware:</strong> one extra 4K-display capture cost WindowServer about 25 ms/s of GPU with ScreenCaptureKit and about 17 ms/s with the older <code>CGDisplayStream</code>. <code>CGDisplayStream</code> is obsoleted in the macOS 15 SDK; LinkLite uses ScreenCaptureKit.</p>
+    </div>
+  </section>
+
+  <section class="section cpu-section" aria-labelledby="cpu-title">
+    <div class="shell">
+      <div class="section-heading"><h2 id="cpu-title">CPU in motion</h2></div>
+      <article class="chapter" aria-labelledby="cpu-motion-title">
+        <div class="chapter-copy">
+          <h2 id="cpu-motion-title">Measured CPU cost</h2>
+          <strong class="big-number">338%</strong>
+          <span class="big-label">LinkLite CPU; 100% represents one core</span>
+        </div>
+        <figure class="chart" aria-labelledby="cpu-chart-title">
+          <div class="chart-top"><h3 class="chart-title" id="cpu-chart-title">Driver CPU · 60 fps animation</h3><span class="guidance">Lower is better</span></div>
+          <div class="bar-group lite">
+            <div class="bar-meta"><span class="bar-name"><strong>LinkLite</strong></span><span class="bar-value">338%</span></div>
+            <div class="track" aria-hidden="true"><span class="fill" style="--value:100%"></span></div>
+          </div>
+          <div class="bar-group">
+            <div class="bar-meta"><span class="bar-name"><strong>DisplayLink Manager</strong></span><span class="bar-value">20%</span></div>
+            <div class="track" aria-hidden="true"><span class="fill" style="--value:5.92%"></span></div>
+          </div>
+          <div class="axis" aria-hidden="true"><span>0%</span><span>338% ≈ 3.4 cores</span></div>
+          <div class="phase-readout" aria-label="CPU on live desktop">
+            <div><span>Live desktop · LinkLite</span><strong>55% ≈ half a core</strong></div>
+            <div><span>Live desktop · Manager</span><strong>2%</strong></div>
+          </div>
+          <figcaption>LinkLite encodes on the CPU; DisplayLink Manager uses the GPU. LinkLite animation runs measured 336% and 339%.</figcaption>
+        </figure>
+      </article>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="size-title">
+    <div class="shell size-layout">
+      <div>
+        <h2 class="size-statement" id="size-title">App bundle size</h2>
+        <strong class="big-number">5.3×</strong>
+        <span class="big-label">smaller: LinkLite 0.3.0 versus Manager</span>
+        <p class="version-note">The measured LinkLite 0.2.0 app was 2.6 MB. No v0.3.17 app-size measurement is recorded.</p>
+      </div>
+      <figure class="chart" aria-labelledby="size-chart-title">
+        <div class="chart-top"><h3 class="chart-title" id="size-chart-title">LinkLite 0.3.0 vs DisplayLink Manager 16.1.25</h3><span class="guidance">Lower is better</span></div>
+        <ul class="legend" aria-label="Chart legend"><li><span class="swatch lite" aria-hidden="true"></span>LinkLite 0.3.0</li><li><span class="swatch" aria-hidden="true"></span>DisplayLink Manager 16.1.25</li></ul>
+        <div class="bar-group lite">
+          <div class="bar-meta"><span class="bar-name"><strong>LinkLite</strong></span><span class="bar-value">3.9 MB</span></div>
+          <div class="track" aria-hidden="true"><span class="fill" style="--value:18.93%"></span></div>
+        </div>
+        <div class="bar-group">
+          <div class="bar-meta"><span class="bar-name"><strong>DisplayLink Manager</strong></span><span class="bar-value">20.6 MB</span></div>
+          <div class="track" aria-hidden="true"><span class="fill" style="--value:100%"></span></div>
+        </div>
+        <div class="axis" aria-hidden="true"><span>0 MB</span><span>20.6 MB</span></div>
+        <figcaption>LinkLite 0.3.0: 3.9 MB. DisplayLink Manager 16.1.25: 20.6 MB. Bundle size is separate from runtime memory.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section raw-section" aria-labelledby="raw-title">
+    <div class="shell">
+      <div class="raw-heading"><h2 id="raw-title">Raw results</h2></div>
+      <div class="table-wrap">
+        <table>
+          <caption>Per-run results from 3 November 2026. GPU time is milliseconds of GPU per second; CPU and whole-GPU busy are percentages.</caption>
+          <thead><tr><th scope="col">Run</th><th scope="col">Phase</th><th scope="col">Whole GPU</th><th scope="col">Driver GPU</th><th scope="col">WindowServer</th><th scope="col">Driver CPU</th><th scope="col">Memory</th></tr></thead>
+          <tbody>
+            <tr data-driver="lite"><th scope="row">lite1</th><td data-label="Phase">desktop</td><td data-label="Whole GPU">3.8%</td><td data-label="Driver GPU">0 ms/s</td><td data-label="WindowServer">123 ms/s</td><td data-label="Driver CPU">53%</td><td data-label="Memory">136 MB</td></tr>
+            <tr data-driver="lite"><th scope="row">lite1</th><td data-label="Phase">animation</td><td data-label="Whole GPU">9.7%</td><td data-label="Driver GPU">0 ms/s</td><td data-label="WindowServer">216 ms/s</td><td data-label="Driver CPU">336%</td><td data-label="Memory">135 MB</td></tr>
+            <tr><th scope="row">dlm</th><td data-label="Phase">desktop</td><td data-label="Whole GPU">2.4%</td><td data-label="Driver GPU">9 ms/s</td><td data-label="WindowServer">67 ms/s</td><td data-label="Driver CPU">2%</td><td data-label="Memory">512 MB</td></tr>
+            <tr><th scope="row">dlm</th><td data-label="Phase">animation</td><td data-label="Whole GPU">33.0%</td><td data-label="Driver GPU">168 ms/s</td><td data-label="WindowServer">155 ms/s</td><td data-label="Driver CPU">20%</td><td data-label="Memory">513 MB</td></tr>
+            <tr data-driver="lite"><th scope="row">lite2</th><td data-label="Phase">desktop</td><td data-label="Whole GPU">19.8%</td><td data-label="Driver GPU">0 ms/s</td><td data-label="WindowServer">200 ms/s</td><td data-label="Driver CPU">58%</td><td data-label="Memory">131 MB</td></tr>
+            <tr data-driver="lite"><th scope="row">lite2</th><td data-label="Phase">animation</td><td data-label="Whole GPU">20.9%</td><td data-label="Driver GPU">0 ms/s</td><td data-label="WindowServer">285 ms/s</td><td data-label="Driver CPU">339%</td><td data-label="Memory">134 MB</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-links">
+        <a class="text-link" href="https://github.com/matthewrball/linklite/blob/main/docs/benchmark/samples-2026-11-03.csv" rel="noopener" target="_blank">Raw samples CSV <span aria-hidden="true">↗</span></a>
+        <a class="text-link" href="https://github.com/matthewrball/linklite/blob/main/docs/benchmark/results.json" rel="noopener" target="_blank">Summary JSON <span aria-hidden="true">↗</span></a>
+        <a class="text-link" href="https://github.com/matthewrball/linklite/blob/main/docs/benchmark/run-2026-11-03.log" rel="noopener" target="_blank">Run log <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section method" id="method" aria-labelledby="method-title">
+    <div class="shell">
+      <div class="method-heading"><h2 id="method-title">Test setup</h2></div>
+      <div class="setup-grid">
+        <div>
+          <h3>Hardware</h3>
+          <dl class="hardware-list">
+            <div><dt>Mac</dt><dd>MacBook Pro, Apple M5 Pro, 64 GB, macOS 26.6</dd></div>
+            <div><dt>Dock</dt><dd>Humanscale M/Connect 2, DL-6xxx “Ridge” (USB <code>17e9:600f</code>) on a 5 Gbps USB link, checked with <code>swift run dlprobe</code></dd></div>
+            <div><dt>Displays</dt><dd>Two HP Z27k G3 monitors, 3840×2160 at 60 Hz, both “looks like” 1920×1080 HiDPI</dd></div>
+            <div><dt>Render check</dt><dd>Both drivers rendered each monitor at 1920×1080 points, 2× (3840×2160 pixels)</dd></div>
+          </dl>
+        </div>
+        <div>
+          <h3>A/B/A sequence</h3>
+          <ol class="run-sequence" aria-label="Benchmark run order">
+            <li class="lite"><span>A · 01</span><strong>LinkLite<br>lite1</strong></li>
+            <li><span>B · 02</span><strong>DisplayLink Manager<br>dlm</strong></li>
+            <li class="lite"><span>A · 03</span><strong>LinkLite again<br>lite2</strong></li>
+          </ol>
+          <ul class="phase-list">
+            <li><strong><code>settle</code><br>15 seconds</strong><span>Nothing; lets the displays come up and the driver reach steady state. Not scored.</span></li>
+            <li><strong><code>desktop</code><br>45 seconds</strong><span>The live desktop as it is: menu-bar clock and idle windows.</span></li>
+            <li><strong><code>animation</code><br>45 seconds</strong><span>A deterministic 60 fps canvas animation—scrolling gradient, drifting cards, frame counter—in a 1600×900 Chrome window on the right-most external screen. Chrome uses an isolated temporary profile.</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <details class="sampling-details">
+        <summary>Sampling method</summary>
+        <div class="sampling">
+        <div class="sampling-intro"><h3>One sample per second</h3><p>The sampler follows <code>LinkLite</code>, or <code>DisplayLinkUserAgent</code> and <code>DisplayLinkXpcService</code>, plus <code>WindowServer</code> for either driver. WindowServer is included because compositor work also consumes resources.</p></div>
+        <dl class="metric-list">
+          <div><dt>Per-process GPU time</dt><dd>AGX per-client <code>AppUsage › accumulatedGPUTime</code> counters from <code>ioreg -r -c AGXDeviceUserClient</code>, summed per process and differenced between samples. This is the counter behind Activity Monitor’s GPU column.</dd></div>
+          <div><dt>Whole-GPU utilisation</dt><dd><code>Device Utilization %</code> in IOAccelerator performance statistics from <code>ioreg -r -c IOAccelerator</code>.</dd></div>
+          <div><dt>CPU, memory, energy impact</dt><dd><code>/usr/bin/top -l 0 -s 1 -stats command,cpu,mem,power</code>.</dd></div>
+          <div><dt>Summary rule</dt><dd>The summary averages <code>lite1</code> and <code>lite2</code>, and scores only <code>desktop</code> and <code>animation</code>. It is not a memory-trend detector.</dd></div>
+        </dl>
+        </div>
+      </details>
+
+      <div class="limits">
+        <div><h3>Limitations</h3><span class="pending">Eight-hour memory soak: not recorded</span></div>
+        <ul>
+          <li><strong>No eight-hour memory soak is recorded.</strong> These A/B/A runs cannot establish bounded memory.</li>
+          <li><strong><code>top</code> memory is not an allocation or leak trace.</strong> Missing GPU counters do not prove zero GPU work; whole-GPU and WindowServer figures include other applications.</li>
+          <li><strong>High LinkLite CPU is measured.</strong> The criterion for materially lower CPU than Manager remains unresolved; memory savings do not satisfy it.</li>
+          <li><strong>Handoffs require supervision.</strong> An outgoing driver left alive or a missing screen invalidates the comparison.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section component" aria-labelledby="component-title">
+    <div class="shell">
+      <div class="component-heading">
+        <h2 id="component-title">Component tests</h2>
+        <p class="component-meta">4 November 2026 · LinkLite v0.3.7 · Hardware-free</p>
+      </div>
+      <div class="component-grid">
+        <article class="component-item">
+          <h3>Hidden panel CPU</h3>
+          <div class="component-values"><del>9.54%</del><span aria-hidden="true">→</span><strong>0.18%</strong></div>
+          <p>Process CPU over six seconds after dismissing the searching panel in a native test host. No attached-display workload.</p>
+        </article>
+        <article class="component-item">
+          <h3>Frame packing</h3>
+          <div class="component-values"><del>204.1 ms</del><span aria-hidden="true">→</span><strong>119.2 ms</strong></div>
+          <p>Time to pack 50 identical cached 3840×2160 Ridge frames in an optimized Rust build. Avoids 16,200 strip-body allocations and 41,988,360 copied body bytes per synthetic full frame; not retained memory or frame rate.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <aside class="source-band" aria-labelledby="source-title">
+    <div class="shell">
+      <div><h2 id="source-title">Full benchmark source</h2><p>Method, limitations, soak procedure, scripts, raw samples, and summary data.</p></div>
+      <a class="text-link" href="https://github.com/matthewrball/linklite/blob/main/docs/BENCHMARK.md" rel="noopener" target="_blank">Read docs/BENCHMARK.md on GitHub <span aria-hidden="true">↗</span></a>
+    </div>
+  </aside>
+
+  <section class="install" aria-labelledby="install-title">
+    <div class="shell install-inner">
+      <div><h2 id="install-title">Download LinkLite v0.3.17</h2><p>Apple silicon · macOS 14 or later · open-source beta. Quit DisplayLink Manager before opening LinkLite.</p></div>
+      <div class="install-actions"><a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download for macOS v0.3.17</a><a href="/">Back to the LinkLite homepage <span aria-hidden="true">↑</span></a></div>
+    </div>
+  </section>
+</main>
+<footer class="foot">
+  <div class="foot-inner">
+    <a class="brand" href="/" aria-label="LinkLite home">Link<span>Lite</span></a>
+    <nav aria-label="Footer">
+      <a href="https://github.com/matthewrball/linklite" rel="noopener" target="_blank">GitHub</a>
+      <a href="#method">Method</a>
+      <a href="https://github.com/matthewrball/linklite/blob/main/PRIVACY.md" rel="noopener" target="_blank">Privacy</a>
+      <a href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download</a>
+    </nav>
+    <p class="disclaimer"><span>Free &amp; open source under GPL-2.0-or-later.</span><span>Not affiliated with Synaptics or DisplayLink. LinkLite © 2026.</span></p>
+  </div>
+</footer>
+</body>
+</html>
