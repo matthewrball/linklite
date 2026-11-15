@@ -3,29 +3,25 @@
 }
 
 .after-film .biblio > .wrap {
-  width: min(1080px, calc(100% - 48px));
+  width: 100%;
+  max-width: 46rem;
   margin: 0 auto;
   padding-inline: max(24px, env(safe-area-inset-left)) max(24px, env(safe-area-inset-right));
 }
 
 .after-film footer.site {
-  margin: 0 auto;
-  padding: 2rem 0 max(24px, env(safe-area-inset-bottom));
+  margin-top: 0;
+  padding-top: 2rem;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
-  width: min(1080px, calc(100% - 48px));
-  max-width: none;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "dom links"
-    "disclaimer disclaimer"
-    "madeon copy";
+  display: flex;
+  flex-wrap: wrap;
   gap: 1rem 2rem;
   align-items: center;
+  justify-content: space-between;
 }
 
 .after-film footer.site .dom {
-  grid-area: dom;
   display: inline-flex;
   align-items: center;
   gap: .7rem;
@@ -38,7 +34,7 @@
 
 .after-film footer.site .dom > .wordmark {
   color: var(--cream);
-  font-weight: 400;
+  font-weight: 650;
   letter-spacing: -.052em;
 }
 
@@ -54,8 +50,6 @@
 }
 
 .after-film footer.site nav {
-  grid-area: links;
-  justify-self: end;
   display: flex;
   flex-wrap: wrap;
   gap: 1.4rem;
@@ -104,7 +98,7 @@
 }
 
 .after-film footer.site .disclaimer {
-  grid-area: disclaimer;
+  flex-basis: 100%;
   width: 100%;
   max-width: none;
   margin: .5rem 0 0;
@@ -126,7 +120,6 @@
 }
 
 .after-film footer.site .madeon {
-  grid-area: madeon;
   margin: 1.4rem 0 0;
   font-size: 13px;
   color: rgba(243, 236, 219, .38);
@@ -144,36 +137,12 @@
 }
 
 .after-film footer.site .copy {
-  grid-area: copy;
-  justify-self: end;
   margin: 1.4rem 0 0;
   font-size: 13px;
   color: rgba(243, 236, 219, .38);
 }
 
-@media (max-width: 760px) {
-  .after-film .biblio > .wrap {
-    width: calc(100% - 40px);
-  }
-}
-
 @media (max-width: 640px) {
-  .after-film footer.site {
-    width: calc(100% - 40px);
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "dom"
-      "links"
-      "disclaimer"
-      "madeon"
-      "copy";
-  }
-
-  .after-film footer.site nav,
-  .after-film footer.site .copy {
-    justify-self: start;
-  }
-
   .after-film footer.site .disclaimer {
     flex-direction: column;
     align-items: flex-start;

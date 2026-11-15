@@ -79,7 +79,8 @@
   .nav .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 650; letter-spacing: -.03em; }
   .nav .brand img { width: 30px; height: 30px; border-radius: 8px; }
   .nav .brand .wordmark { color: var(--cream); }
-  .wordmark { font-weight: 400; letter-spacing: -.052em; }
+  .wordmark { color: var(--cream); font-family: var(--font); font-weight: 650; letter-spacing: -.052em; }
+  .wordmark > span { color: var(--mint); }
   .nav nav { display: flex; gap: 22px; align-items: center; }
   .nav nav a { color: var(--faint); text-decoration: none; font-size: 14px; }
   .nav .dl { min-height: 34px; padding: 0 14px; font-size: 13px; }
@@ -189,7 +190,6 @@
   .install-heading { display: flex; align-items: center; gap: 18px; min-width: 0; }
   .install-icon { width: 58px; height: 58px; flex: none; border-radius: 14px; box-shadow: 0 14px 28px rgba(0,0,0,.24); }
   .install-heading h2 { max-width: none; margin: 0; font-size: clamp(32px,4.4vw,54px); line-height: 1.08; letter-spacing: -.045em; }
-  .install-heading .wordmark span { color: var(--mint); }
   .install-meta { margin: 9px 0 0; color: var(--sub); font-size: 14px; line-height: 1.5; }
   .install-download { justify-self: end; min-height: 52px; white-space: nowrap; }
   @media (min-width: 761px) and (max-width: 1100px) {
@@ -304,7 +304,7 @@
 <body>
 <main class="film" data-film>
   <header class="nav" data-site-nav inert><a class="brand mark" href="#top" aria-label="LinkLite home"><img src="assets/logo.png" alt="" width="30" height="30" decoding="async"><span class="wordmark">Link<span>Lite</span></span></a><nav aria-label="Main navigation">
-    <a href="/benchmarks/">Benchmarks</a><a href="https://matthewball.me/blog/" target="_blank" rel="noopener">Blog</a><a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download</a>
+    <a href="/benchmarks/">Benchmark</a><a href="https://matthewball.me/blog/" target="_blank" rel="noopener">Blog</a><a class="dl" href="https://github.com/matthewrball/linklite/releases/download/v0.3.17/LinkLite-0.3.17.dmg">Download</a>
   </nav></header>
   <section class="film-experience" data-experience id="top" aria-label="LinkLite product story">
     <div class="film-sticky">
