@@ -322,17 +322,22 @@ private struct MonitorCard: View {
     let monitor: PanelModel.Monitor
     let setOrientation: (DisplayOrientation) -> Void
 
-    /// A problem is shown first. A waiting head says so, and a head with no stream running says it is starting, so
-    /// nothing is shown as live without a stream.
-    private var line: String {
+    /// The card's second line, or nil while a head waits for its identity: the wait needs more words than the
+    /// line has room for, so the note under the card carries it and the pill marks the state. A problem is
+    /// shown first, and a head with no stream running says it is starting, so nothing is shown as live
+    /// without a stream.
+    private var line: String? {
         if let problem = monitor.problem { return problem }
-        if monitor.waiting { return "Waiting for macOS to release this monitor's display" }
+        if monitor.waiting { return nil }
         return monitor.capturing ? monitor.detail : "Starting capture…"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             card
+            if monitor.waiting {
+                note("Waiting for macOS to release this monitor's display.")
+            }
             if monitor.orientation.swapsAxes {
                 note("Portrait rebuilds this monitor's display, so macOS may move its windows.")
             }
@@ -372,10 +377,12 @@ private struct MonitorCard: View {
                 Text(monitor.name)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
-                Text(line)
-                    .font(.system(size: 11.5).monospacedDigit())
-                    .foregroundStyle(monitor.problem == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
-                    .lineLimit(1)
+                if let line {
+                    Text(line)
+                        .font(.system(size: 11.5).monospacedDigit())
+                        .foregroundStyle(monitor.problem == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+                        .lineLimit(1)
+                }
             }
             // Fills the row itself rather than leaning on a Spacer: the menu and pill stay pinned
             // right and aligned across cards, and the detail line keeps the gap a Spacer would eat.
